@@ -20,13 +20,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { PlusCircle } from 'lucide-react';
-import { Quiz } from '@/types/quizzes';
+import { Quiz } from '@/types/sprachenwald';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface AddQuizDialogProps {
-  onAddQuiz: (newQuiz: Quiz) => void;
+  lessonId: string | null;
+  currentQuizzes: Quiz[];
 }
 
-export const AddQuizDialog = ({ onAddQuiz }: AddQuizDialogProps) => {
+export const AddQuizDialog = ({
+  lessonId,
+  currentQuizzes,
+}: AddQuizDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [quizType, setQuizType] = useState<
     'multiple-choice' | 'fill-in-the-blank'
@@ -42,8 +48,8 @@ export const AddQuizDialog = ({ onAddQuiz }: AddQuizDialogProps) => {
     setMcOptions(newOptions);
   };
 
-  const handleAddQuiz = () => {
-    if (!currentQuestion.trim()) return;
+  const handleAddQuiz = async () => {
+    if (!currentQuestion.trim() || !lessonId) return;
 
     let newQuiz: Quiz | null = null;
     if (quizType === 'multiple-choice') {
@@ -79,7 +85,10 @@ export const AddQuizDialog = ({ onAddQuiz }: AddQuizDialogProps) => {
     }
 
     if (newQuiz) {
-      onAddQuiz(newQuiz);
+      const updatedQuizzes = [...currentQuizzes, newQuiz];
+      const lessonRef = doc(db, 'lessons', lessonId);
+      await updateDoc(lessonRef, { quizzes: updatedQuizzes });
+
       setCurrentQuestion('');
       setMcOptions(['', '', '', '']);
       setCorrectMcAnswer('');

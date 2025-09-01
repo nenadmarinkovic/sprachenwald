@@ -37,9 +37,13 @@ import {
 import { SortableLessonItem } from '@/components/SortableLessonItem';
 import { arrayMove } from '@dnd-kit/sortable';
 import { DragEndEvent } from '@dnd-kit/core';
-import { Quiz, LessonWithId } from '@/types/quizzes';
-import { AddQuizDialog } from '@/components/AddQuizDialog';
 import { DndContextProvider } from '@/context/DnDContextProvider';
+import {
+  Lesson,
+  LessonWithId,
+  InteractiveWord,
+} from '@/types/sprachenwald';
+import { AddQuizDialog } from '@/components/AddQuizDialog';
 
 const AdminPage = () => {
   const [allLessons, setAllLessons] = useState<LessonWithId[]>([]);
@@ -48,11 +52,9 @@ const AdminPage = () => {
   >(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [isLessonDialogOpen, setIsLessonDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -69,20 +71,33 @@ const AdminPage = () => {
     return () => unsubscribe();
   }, []);
 
+  const selectedLesson = allLessons.find(
+    (lesson) => lesson.id === selectedLessonId
+  );
+
   useEffect(() => {
-    const selectedLesson = allLessons.find(
-      (l) => l.id === selectedLessonId
-    );
     if (selectedLesson) {
       setTitle(selectedLesson.title);
-      setContent(selectedLesson.content);
-      setQuizzes(selectedLesson.quizzes || []);
+      setContent(JSON.stringify(selectedLesson.content, null, 2));
     } else {
       setTitle('');
-      setContent('');
-      setQuizzes([]);
+      setContent(
+        JSON.stringify(
+          [
+            {
+              type: 'text',
+              german: [
+                { german: 'Beispiel', serbian: 'Primer', info: 'n.' },
+              ],
+              serbian: 'Primer recenice.',
+            },
+          ],
+          null,
+          2
+        )
+      );
     }
-  }, [selectedLessonId, allLessons]);
+  }, [selectedLesson]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -106,8 +121,8 @@ const AdminPage = () => {
     }
   };
 
-  const createSlug = (title: string) =>
-    title
+  const createSlug = (title: string) => {
+    return title
       .toLowerCase()
       .replace(/đ/g, 'dj')
       .replace(/š/g, 's')
@@ -116,16 +131,11 @@ const AdminPage = () => {
       .replace(/ž/g, 'z')
       .replace(/ /g, '-')
       .replace(/[^\w-]+/g, '');
+  };
 
   const handleOpenLessonDialog = (lessonId: string | null) => {
     setSelectedLessonId(lessonId);
     setError(null);
-    setSuccess(null);
-    if (!lessonId) {
-      setTitle('');
-      setContent('');
-      setQuizzes([]);
-    }
     setIsLessonDialogOpen(true);
   };
 
@@ -138,16 +148,44 @@ const AdminPage = () => {
     setIsLoading(true);
     setError(null);
 
+    let parsedContent;
+    try {
+      parsedContent = JSON.parse(content);
+    } catch (e) {
+      setError('Sadržaj nije validan JSON format.');
+      setIsLoading(false);
+      return;
+    }
+
     const slug = createSlug(title);
     const isEditing = !!selectedLessonId;
     const currentLesson = allLessons.find(
       (l) => l.id === selectedLessonId
     );
 
-    const lessonData = {
+    const vocabulary: Omit<InteractiveWord, 'info'>[] = [];
+    if (Array.isArray(parsedContent)) {
+      parsedContent.forEach((block) => {
+        if (block.type === 'text' && Array.isArray(block.german)) {
+          block.german.forEach((word: InteractiveWord) => {
+            vocabulary.push({
+              german: word.german,
+              serbian: word.serbian,
+            });
+          });
+        }
+      });
+    }
+
+    const uniqueVocabulary = Array.from(
+      new Map(vocabulary.map((item) => [item.german, item])).values()
+    );
+
+    const lessonData: Partial<Lesson> = {
       title,
-      content,
+      content: parsedContent,
       slug,
+      vocabulary: uniqueVocabulary,
       quizzes: isEditing ? currentLesson?.quizzes ?? [] : [],
       order: isEditing
         ? currentLesson?.order ?? allLessons.length
@@ -158,13 +196,11 @@ const AdminPage = () => {
       if (isEditing) {
         const lessonRef = doc(db, 'lessons', selectedLessonId);
         await updateDoc(lessonRef, lessonData);
-        setSuccess('Lekcija je uspešno ažurirana!');
       } else {
         await addDoc(collection(db, 'lessons'), {
           ...lessonData,
           createdAt: Timestamp.now(),
         });
-        setSuccess('Lekcija je uspešno dodata!');
       }
       setIsLessonDialogOpen(false);
     } catch (err: unknown) {
@@ -175,29 +211,6 @@ const AdminPage = () => {
       setIsLoading(false);
     }
   };
-
-  const handleAddQuiz = async (newQuiz: Quiz) => {
-    if (!selectedLessonId) return;
-
-    const updatedQuizzes = [...quizzes, newQuiz];
-    const lessonRef = doc(db, 'lessons', selectedLessonId);
-    await updateDoc(lessonRef, { quizzes: updatedQuizzes });
-    setQuizzes(updatedQuizzes);
-  };
-
-  const handleRemoveQuiz = async (indexToRemove: number) => {
-    if (!selectedLessonId) return;
-    const updatedQuizzes = quizzes.filter(
-      (_, index) => index !== indexToRemove
-    );
-    const lessonRef = doc(db, 'lessons', selectedLessonId);
-    await updateDoc(lessonRef, { quizzes: updatedQuizzes });
-    setQuizzes(updatedQuizzes);
-  };
-
-  const selectedLessonForQuiz = allLessons.find(
-    (l) => l.id === selectedLessonId
-  );
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -228,7 +241,8 @@ const AdminPage = () => {
                   : 'Dodaj novu lekciju'}
               </DialogTitle>
               <DialogDescription>
-                Unesite detalje za lekciju ovde.
+                Unesite detalje za lekciju ovde. Sadržaj mora biti u
+                JSON formatu.
               </DialogDescription>
             </DialogHeader>
             <form
@@ -245,13 +259,16 @@ const AdminPage = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="content">Sadržaj lekcije</Label>
+                <Label htmlFor="content">
+                  Sadržaj lekcije (JSON)
+                </Label>
                 <Textarea
                   id="content"
-                  rows={10}
+                  rows={15}
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   required
+                  className="font-mono text-sm"
                 />
               </div>
               {error && (
@@ -292,18 +309,18 @@ const AdminPage = () => {
 
       <main className="w-full md:w-2/3 lg:w-3/4 p-8 overflow-y-auto">
         <div className="w-full max-w-4xl mx-auto">
-          {selectedLessonForQuiz ? (
+          {selectedLesson ? (
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Kvizovi za: {selectedLessonForQuiz.title}
+                  Kvizovi za: {selectedLesson.title}
                 </CardTitle>
                 <CardDescription>
                   Dodajte i upravljajte kvizovima za ovu lekciju.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {quizzes.map((quiz, index) => (
+                {selectedLesson.quizzes?.map((quiz, index) => (
                   <div
                     key={index}
                     className="flex justify-between items-center p-3 bg-muted rounded-lg"
@@ -311,21 +328,21 @@ const AdminPage = () => {
                     <span className="font-medium text-sm">
                       {index + 1}. {quiz.question}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveQuiz(index)}
-                    >
+                    <Button variant="ghost" size="icon">
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 ))}
-                {quizzes.length === 0 && (
+                {(!selectedLesson.quizzes ||
+                  selectedLesson.quizzes.length === 0) && (
                   <p className="text-muted-foreground text-sm py-4 text-center">
                     Još nema dodatih kvizova.
                   </p>
                 )}
-                <AddQuizDialog onAddQuiz={handleAddQuiz} />
+                <AddQuizDialog
+                  lessonId={selectedLessonId}
+                  currentQuizzes={selectedLesson.quizzes || []}
+                />
               </CardContent>
             </Card>
           ) : (

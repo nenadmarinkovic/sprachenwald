@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/lib/firebase';
@@ -97,6 +97,36 @@ export default function LessonPageLayout() {
     return () => unsubscribe();
   }, [slug]);
 
+  const lessonVocabulary = useMemo(() => {
+    if (!currentLesson) return [];
+
+    if (
+      Array.isArray(currentLesson.vocabulary) &&
+      currentLesson.vocabulary.length > 0
+    ) {
+      return currentLesson.vocabulary;
+    }
+
+    if (Array.isArray(currentLesson.content)) {
+      const derivedVocab = currentLesson.content
+        .filter((block) => block.type === 'text')
+        .flatMap((block) =>
+          (block as LessonContentBlock).german.map((word) => ({
+            german: word.german,
+            serbian: word.serbian,
+          }))
+        );
+
+      return Array.from(
+        new Map(
+          derivedVocab.map((item) => [item.german, item])
+        ).values()
+      );
+    }
+
+    return [];
+  }, [currentLesson]);
+
   const handleWordSelection = (germanWord: string) => {
     setSelectedWords((prev) => ({
       ...prev,
@@ -105,8 +135,8 @@ export default function LessonPageLayout() {
   };
 
   const handleAddVocabulary = async () => {
-    if (!user || !currentLesson || !currentLesson.vocabulary) return;
-    const wordsToAdd = currentLesson.vocabulary.filter(
+    if (!user || !currentLesson) return;
+    const wordsToAdd = lessonVocabulary.filter(
       (word) => selectedWords[word.german]
     );
 
@@ -216,72 +246,70 @@ export default function LessonPageLayout() {
           />
         )}
 
-        {currentLesson.vocabulary &&
-          Array.isArray(currentLesson.vocabulary) &&
-          currentLesson.vocabulary.length > 0 && (
-            <div className="mt-12 border-t pt-8">
-              <h2 className="text-2xl font-bold mb-4">
-                Dodaj u Rečnik (Sprachgarten)
-              </h2>
-              {user ? (
-                <>
-                  <div className="space-y-2">
-                    {currentLesson.vocabulary.map((word, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center space-x-2"
+        {lessonVocabulary.length > 0 && (
+          <div className="mt-12 border-t pt-8">
+            <h2 className="text-2xl font-bold mb-4">
+              Dodaj u Rečnik (Sprachgarten)
+            </h2>
+            {user ? (
+              <>
+                <div className="space-y-2">
+                  {lessonVocabulary.map((word, index) => (
+                    <div
+                      key={`${word.german}-${index}`}
+                      className="flex items-center space-x-2"
+                    >
+                      <Checkbox
+                        id={`vocab-${index}`}
+                        onCheckedChange={() =>
+                          handleWordSelection(word.german)
+                        }
+                        checked={!!selectedWords[word.german]}
+                      />
+                      <label
+                        htmlFor={`vocab-${index}`}
+                        className="flex-grow cursor-pointer"
                       >
-                        <Checkbox
-                          id={`vocab-${index}`}
-                          onCheckedChange={() =>
-                            handleWordSelection(word.german)
-                          }
-                          checked={!!selectedWords[word.german]}
-                        />
-                        <label
-                          htmlFor={`vocab-${index}`}
-                          className="flex-grow cursor-pointer"
-                        >
-                          <span className="font-semibold">
-                            {word.german}
-                          </span>{' '}
-                          - <span>{word.serbian}</span>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    onClick={handleAddVocabulary}
-                    className="mt-6"
-                    disabled={Object.values(selectedWords).every(
-                      (v) => !v
-                    )}
-                  >
-                    Dodaj selektovano
-                  </Button>
-                </>
-              ) : (
-                <div className="p-4 bg-gray-100 rounded-md text-center">
-                  <p className="text-gray-700">
-                    <Link
-                      href="/login"
-                      className="font-bold text-green-600 hover:underline"
-                    >
-                      Prijavite se
-                    </Link>{' '}
-                    ili{' '}
-                    <Link
-                      href="/signup"
-                      className="font-bold text-green-600 hover:underline"
-                    >
-                      registrujte
-                    </Link>{' '}
-                    da biste sačuvali reči u svoj lični rečnik.
-                  </p>
+                        <span className="font-semibold">
+                          {word.german}
+                        </span>{' '}
+                        - <span>{word.serbian}</span>
+                      </label>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
+                <Button
+                  onClick={handleAddVocabulary}
+                  className="mt-6"
+                  disabled={Object.values(selectedWords).every(
+                    (v) => !v
+                  )}
+                >
+                  Dodaj selektovano
+                </Button>
+              </>
+            ) : (
+              <div className="p-4 bg-gray-100 rounded-md text-center">
+                <p className="text-gray-700">
+                  <Link
+                    href="/login"
+                    className="font-bold text-green-600 hover:underline"
+                  >
+                    Prijavite se
+                  </Link>{' '}
+                  ili{' '}
+                  <Link
+                    href="/signup"
+                    className="font-bold text-green-600 hover:underline"
+                  >
+                    registrujte
+                  </Link>{' '}
+                  da biste sačuvali reči u svoj lični rečnik.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {currentLesson.quizzes?.length > 0 && (
           <div className="mt-12">
