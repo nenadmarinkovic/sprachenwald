@@ -9,14 +9,42 @@ import {
   query,
   orderBy,
   Timestamp,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { PlusCircle, Trash2, LayoutDashboard } from 'lucide-react';
 import {
-  Book,
-  PlusCircle,
-  Trash2,
-  LayoutDashboard,
-} from 'lucide-react';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { SortableLessonItem } from '@/components/SortableLessonItem';
+import { arrayMove } from '@dnd-kit/sortable';
+import { DragEndEvent } from '@dnd-kit/core';
+import { DndContextProvider } from '@/context/DnDContextProvider';
 
 interface MultipleChoiceQuiz {
   type: 'multiple-choice';
@@ -39,6 +67,7 @@ interface Lesson {
   slug: string;
   quizzes: Quiz[];
   createdAt: Timestamp;
+  order: number;
 }
 
 interface LessonWithId extends Lesson {
@@ -65,11 +94,13 @@ const AdminPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isLessonDialogOpen, setIsLessonDialogOpen] = useState(false);
+  const [isQuizDialogOpen, setIsQuizDialogOpen] = useState(false);
 
   useEffect(() => {
     const lessonsQuery = query(
       collection(db, 'lessons'),
-      orderBy('createdAt', 'desc')
+      orderBy('order', 'asc')
     );
     const unsubscribe = onSnapshot(lessonsQuery, (snapshot) => {
       const lessonsData = snapshot.docs.map(
@@ -97,6 +128,28 @@ const AdminPage = () => {
     }
   }, [selectedLessonId, allLessons]);
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = allLessons.findIndex(
+        (lesson) => lesson.id === active.id
+      );
+      const newIndex = allLessons.findIndex(
+        (lesson) => lesson.id === over.id
+      );
+      const newOrder = arrayMove(allLessons, oldIndex, newIndex);
+      setAllLessons(newOrder);
+
+      const batch = writeBatch(db);
+      newOrder.forEach((lesson, index) => {
+        const lessonRef = doc(db, 'lessons', lesson.id);
+        batch.update(lessonRef, { order: index });
+      });
+      await batch.commit();
+    }
+  };
+
   const createSlug = (title: string) => {
     return title
       .toLowerCase()
@@ -115,25 +168,22 @@ const AdminPage = () => {
     setMcOptions(newOptions);
   };
 
-  const handleAddQuiz = () => {
-    if (!currentQuestion.trim()) {
-      alert('Molimo unesite pitanje za kviz.');
-      return;
-    }
+  const handleAddQuiz = async () => {
+    if (!currentQuestion.trim() || !selectedLessonId) return;
 
     let newQuiz: Quiz | null = null;
     if (quizType === 'multiple-choice') {
       const filteredOptions = mcOptions.filter(
         (opt) => opt.trim() !== ''
       );
-      if (filteredOptions.length < 2 || !correctMcAnswer.trim()) {
+      if (
+        filteredOptions.length < 2 ||
+        !correctMcAnswer.trim() ||
+        !filteredOptions.includes(correctMcAnswer)
+      ) {
         alert(
-          'Molimo unesite bar dve opcije i odaberite tačan odgovor.'
+          'Please provide at least two options and select a valid correct answer.'
         );
-        return;
-      }
-      if (!filteredOptions.includes(correctMcAnswer)) {
-        alert('Tačan odgovor mora biti jedna od ponuđenih opcija.');
         return;
       }
       newQuiz = {
@@ -144,7 +194,7 @@ const AdminPage = () => {
       };
     } else {
       if (!fibCorrectAnswer.trim()) {
-        alert('Molimo unesite tačan odgovor.');
+        alert('Please provide a correct answer.');
         return;
       }
       newQuiz = {
@@ -155,324 +205,353 @@ const AdminPage = () => {
     }
 
     if (newQuiz) {
-      setQuizzes([...quizzes, newQuiz]);
+      const updatedQuizzes = [...quizzes, newQuiz];
+      const lessonRef = doc(db, 'lessons', selectedLessonId);
+      await updateDoc(lessonRef, { quizzes: updatedQuizzes });
+
+      setQuizzes(updatedQuizzes);
       setCurrentQuestion('');
       setMcOptions(['', '', '', '']);
       setCorrectMcAnswer('');
       setFibCorrectAnswer('');
+      setIsQuizDialogOpen(false);
     }
   };
 
-  const handleRemoveQuiz = (indexToRemove: number) => {
-    setQuizzes(quizzes.filter((_, index) => index !== indexToRemove));
+  const handleRemoveQuiz = async (indexToRemove: number) => {
+    if (!selectedLessonId) return;
+    const updatedQuizzes = quizzes.filter(
+      (_, index) => index !== indexToRemove
+    );
+    const lessonRef = doc(db, 'lessons', selectedLessonId);
+    await updateDoc(lessonRef, { quizzes: updatedQuizzes });
+    setQuizzes(updatedQuizzes);
   };
 
-  const handleSelectLesson = (lessonId: string | null) => {
+  const handleOpenLessonDialog = (lessonId: string | null) => {
     setSelectedLessonId(lessonId);
-    setSuccess(null);
     setError(null);
+    setSuccess(null);
+    if (!lessonId) {
+      setTitle('');
+      setContent('');
+      setQuizzes([]);
+    }
+    setIsLessonDialogOpen(true);
   };
 
   const handleSaveLesson = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-    setSuccess(null);
-
     if (!title || !content) {
       setError('Naslov i sadržaj su obavezni.');
-      setIsLoading(false);
       return;
     }
+    setIsLoading(true);
+    setError(null);
 
     const slug = createSlug(title);
-    const lessonData = { title, content, slug, quizzes };
+    const isEditing = !!selectedLessonId;
+    const currentLesson = allLessons.find(
+      (l) => l.id === selectedLessonId
+    );
+
+    const lessonData = {
+      title,
+      content,
+      slug,
+      quizzes: isEditing ? currentLesson?.quizzes ?? [] : [],
+      order: isEditing
+        ? currentLesson?.order ?? allLessons.length
+        : allLessons.length,
+    };
 
     try {
-      if (selectedLessonId) {
+      if (isEditing) {
         const lessonRef = doc(db, 'lessons', selectedLessonId);
-        await updateDoc(
-          lessonRef,
-          lessonData as { [x: string]: unknown }
-        );
+        await updateDoc(lessonRef, lessonData);
         setSuccess('Lekcija je uspešno ažurirana!');
       } else {
-        const lessonsCollection = collection(db, 'lessons');
-        await addDoc(lessonsCollection, {
+        await addDoc(collection(db, 'lessons'), {
           ...lessonData,
           createdAt: Timestamp.now(),
         });
         setSuccess('Lekcija je uspešno dodata!');
-        handleSelectLesson(null);
       }
-    } catch (err) {
-      console.error('Greška pri čuvanju lekcije:', err);
+      setIsLessonDialogOpen(false);
+    } catch (err: unknown) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Došlo je do neočekivane greške.'
+        err instanceof Error ? err.message : 'Došlo je do greške.'
       );
     } finally {
       setIsLoading(false);
     }
   };
 
+  const selectedLessonForQuiz = allLessons.find(
+    (l) => l.id === selectedLessonId
+  );
+
   return (
     <div className="flex h-screen bg-gray-100">
-      <aside className="w-1/4 bg-white border-r p-4 overflow-y-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <LayoutDashboard /> Admin Panel
-        </h1>
-        <button
-          onClick={() => handleSelectLesson(null)}
-          className="w-full mb-4 flex items-center justify-center gap-2 h-10 px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 transition-colors text-sm"
-        >
-          <PlusCircle size={16} /> Nova Lekcija
-        </button>
-        <nav className="space-y-1">
-          {allLessons.map((lesson) => (
-            <button
-              key={lesson.id}
-              onClick={() => handleSelectLesson(lesson.id)}
-              className={`w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                selectedLessonId === lesson.id
-                  ? 'bg-gray-200 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {lesson.title}
-            </button>
-          ))}
-        </nav>
-      </aside>
+      <aside className="w-full md:w-1/3 lg:w-1/4 bg-white border-r p-4 overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <LayoutDashboard /> Admin
+          </h1>
+        </div>
 
-      <main className="w-3/4 p-8 overflow-y-auto">
-        <div className="w-full max-w-3xl mx-auto">
-          <div className="p-8 space-y-6 bg-white rounded-2xl mb-8 border">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-800 flex items-center justify-center gap-2">
-                <Book />
+        <Dialog
+          open={isLessonDialogOpen}
+          onOpenChange={setIsLessonDialogOpen}
+        >
+          <DialogTrigger asChild>
+            <Button
+              onClick={() => handleOpenLessonDialog(null)}
+              className="w-full mb-4"
+            >
+              <PlusCircle size={16} className="mr-2" /> Nova Lekcija
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[625px]">
+            <DialogHeader>
+              <DialogTitle>
                 {selectedLessonId
                   ? 'Izmeni lekciju'
                   : 'Dodaj novu lekciju'}
-              </h2>
-            </div>
-
-            <form className="space-y-6" onSubmit={handleSaveLesson}>
-              <div>
-                <label
-                  htmlFor="title"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Naslov lekcije
-                </label>
-                <input
+              </DialogTitle>
+              <DialogDescription>
+                Unesite detalje za lekciju ovde.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-4 py-4"
+              onSubmit={handleSaveLesson}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="title">Naslov lekcije</Label>
+                <Input
                   id="title"
-                  type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full h-10 px-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
                   required
                 />
               </div>
-              <div>
-                <label
-                  htmlFor="content"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Sadržaj lekcije
-                </label>
-                <textarea
+              <div className="space-y-2">
+                <Label htmlFor="content">Sadržaj lekcije</Label>
+                <Textarea
                   id="content"
                   rows={10}
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
                   required
                 />
               </div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full h-10 px-4 py-2 flex items-center justify-center gap-2 text-white bg-green-600 rounded-md font-semibold hover:bg-green-700 transition-colors disabled:bg-green-300"
-              >
-                {isLoading ? (
-                  'Čuvanje...'
-                ) : (
-                  <>
-                    <PlusCircle size={20} /> Sačuvaj lekciju
-                  </>
-                )}
-              </button>
               {error && (
-                <p className="text-red-500 text-sm text-center mt-2">
-                  {error}
-                </p>
+                <p className="text-sm text-destructive">{error}</p>
               )}
-              {success && (
-                <p className="text-green-500 text-sm text-center mt-2">
-                  {success}
-                </p>
-              )}
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="secondary">
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? 'Čuvanje...' : 'Sačuvaj lekciju'}
+                </Button>
+              </DialogFooter>
             </form>
-          </div>
+          </DialogContent>
+        </Dialog>
 
-          <div className="p-8 space-y-6 bg-white rounded-2xl  border">
-            <h2 className="text-2xl font-bold text-gray-800">
-              Kvizovi za lekciju
-            </h2>
-            <div className="space-y-2">
-              {quizzes.map((quiz, index) => (
-                <div
-                  key={index}
-                  className="flex justify-between items-center p-3 bg-gray-100 rounded-lg"
-                >
-                  <span className="font-medium text-sm">
-                    {index + 1}. {quiz.question}
-                  </span>
-                  <button
-                    onClick={() => handleRemoveQuiz(index)}
-                    className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100"
+        <DndContextProvider
+          onDragEnd={handleDragEnd}
+          items={allLessons}
+        >
+          <nav className="space-y-1">
+            {allLessons.map((lesson) => (
+              <SortableLessonItem
+                key={lesson.id}
+                id={lesson.id}
+                title={lesson.title}
+                order={lesson.order}
+                onClick={() => handleOpenLessonDialog(lesson.id)}
+                isSelected={selectedLessonId === lesson.id}
+              />
+            ))}
+          </nav>
+        </DndContextProvider>
+      </aside>
+
+      <main className="w-full md:w-2/3 lg:w-3/4 p-8 overflow-y-auto">
+        <div className="w-full max-w-4xl mx-auto">
+          {selectedLessonForQuiz ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Kvizovi za: {selectedLessonForQuiz.title}
+                </CardTitle>
+                <CardDescription>
+                  Dodajte i upravljajte kvizovima za ovu lekciju.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {quizzes.map((quiz, index) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center p-3 bg-muted rounded-lg"
                   >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-              {quizzes.length === 0 && (
-                <p className="text-gray-500 text-sm">
-                  Još nema dodatih kvizova.
-                </p>
-              )}
-            </div>
-            <div className="border-t pt-6 space-y-4">
-              <h3 className="text-xl font-semibold">
-                Dodaj novi kviz
-              </h3>
-              <div>
-                <label
-                  htmlFor="quizType"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Tip kviza
-                </label>
-                <select
-                  id="quizType"
-                  value={quizType}
-                  onChange={(e) =>
-                    setQuizType(
-                      e.target.value as
-                        | 'multiple-choice'
-                        | 'fill-in-the-blank'
-                    )
-                  }
-                  className="w-full h-10 px-3 border border-gray-300 rounded-md"
-                >
-                  <option value="multiple-choice">
-                    Višestruki izbor
-                  </option>
-                  <option value="fill-in-the-blank">
-                    Popuni prazninu
-                  </option>
-                </select>
-              </div>
-              <div>
-                <label
-                  htmlFor="currentQuestion"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Pitanje
-                </label>
-                {quizType === 'fill-in-the-blank' && (
-                  <small className="text-xs text-gray-500">
-                    Koristite ___ da označite prazninu.
-                  </small>
-                )}
-                <input
-                  id="currentQuestion"
-                  type="text"
-                  value={currentQuestion}
-                  onChange={(e) => setCurrentQuestion(e.target.value)}
-                  className="w-full mt-1 h-10 px-3 border border-gray-300 rounded-md"
-                />
-              </div>
-              {quizType === 'multiple-choice' && (
-                <div className="space-y-3">
-                  {mcOptions.map((option, index) => (
-                    <div key={index}>
-                      <label
-                        htmlFor={`option-${index}`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Opcija {index + 1}
-                      </label>
-                      <input
-                        id={`option-${index}`}
-                        type="text"
-                        value={option}
-                        onChange={(e) =>
-                          handleOptionChange(index, e.target.value)
-                        }
-                        className="w-full h-9 px-3 border border-gray-300 rounded-md"
-                      />
-                    </div>
-                  ))}
-                  <div>
-                    <label
-                      htmlFor="correctMcAnswer"
-                      className="block text-sm font-medium text-gray-700 mb-1"
+                    <span className="font-medium text-sm">
+                      {index + 1}. {quiz.question}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveQuiz(index)}
                     >
-                      Tačan odgovor
-                    </label>
-                    <select
-                      id="correctMcAnswer"
-                      value={correctMcAnswer}
-                      onChange={(e) =>
-                        setCorrectMcAnswer(e.target.value)
-                      }
-                      className="w-full h-10 px-3 border border-gray-300 rounded-md"
-                    >
-                      <option value="">
-                        Odaberite tačan odgovor
-                      </option>
-                      {mcOptions
-                        .filter((opt) => opt)
-                        .map((opt, i) => (
-                          <option key={i} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                    </select>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
-                </div>
-              )}
-              {quizType === 'fill-in-the-blank' && (
-                <div>
-                  <label
-                    htmlFor="fibCorrectAnswer"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Tačan odgovor
-                  </label>
-                  <input
-                    id="fibCorrectAnswer"
-                    type="text"
-                    value={fibCorrectAnswer}
-                    onChange={(e) =>
-                      setFibCorrectAnswer(e.target.value)
-                    }
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md"
-                  />
-                </div>
-              )}
-              <button
-                onClick={handleAddQuiz}
-                type="button"
-                className="w-full h-10 px-4 py-2 flex items-center justify-center gap-2 text-white bg-blue-600 rounded-md font-semibold hover:bg-blue-700"
-              >
-                Dodaj kviz u lekciju
-              </button>
+                ))}
+                {quizzes.length === 0 && (
+                  <p className="text-muted-foreground text-sm py-4 text-center">
+                    Još nema dodatih kvizova.
+                  </p>
+                )}
+                <Dialog
+                  open={isQuizDialogOpen}
+                  onOpenChange={setIsQuizDialogOpen}
+                >
+                  <DialogTrigger asChild>
+                    <Button className="w-full mt-4">
+                      <PlusCircle size={16} className="mr-2" /> Dodaj
+                      novi kviz
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Dodaj novi kviz</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="quizType">Tip kviza</Label>
+                        <Select
+                          onValueChange={(
+                            value:
+                              | 'multiple-choice'
+                              | 'fill-in-the-blank'
+                          ) => setQuizType(value)}
+                          defaultValue={quizType}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Izaberite tip" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="multiple-choice">
+                              Višestruki izbor
+                            </SelectItem>
+                            <SelectItem value="fill-in-the-blank">
+                              Popuni prazninu
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="currentQuestion">
+                          Pitanje
+                        </Label>
+                        {quizType === 'fill-in-the-blank' && (
+                          <p className="text-xs text-muted-foreground">
+                            Koristite ___ da označite prazninu.
+                          </p>
+                        )}
+                        <Input
+                          id="currentQuestion"
+                          value={currentQuestion}
+                          onChange={(e) =>
+                            setCurrentQuestion(e.target.value)
+                          }
+                        />
+                      </div>
+
+                      {quizType === 'multiple-choice' && (
+                        <div className="space-y-3">
+                          {mcOptions.map((option, index) => (
+                            <div key={index} className="space-y-2">
+                              <Label htmlFor={`option-${index}`}>
+                                Opcija {index + 1}
+                              </Label>
+                              <Input
+                                id={`option-${index}`}
+                                value={option}
+                                onChange={(e) =>
+                                  handleOptionChange(
+                                    index,
+                                    e.target.value
+                                  )
+                                }
+                              />
+                            </div>
+                          ))}
+                          <div className="space-y-2">
+                            <Label htmlFor="correctMcAnswer">
+                              Tačan odgovor
+                            </Label>
+                            <Select
+                              onValueChange={setCorrectMcAnswer}
+                              value={correctMcAnswer}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Odaberite tačan odgovor" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {mcOptions
+                                  .filter((opt) => opt)
+                                  .map((opt, i) => (
+                                    <SelectItem key={i} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
+
+                      {quizType === 'fill-in-the-blank' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="fibCorrectAnswer">
+                            Tačan odgovor
+                          </Label>
+                          <Input
+                            id="fibCorrectAnswer"
+                            value={fibCorrectAnswer}
+                            onChange={(e) =>
+                              setFibCorrectAnswer(e.target.value)
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button type="button" variant="secondary">
+                          Cancel
+                        </Button>
+                      </DialogClose>
+                      <Button onClick={handleAddQuiz} type="button">
+                        Dodaj kviz
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="text-center text-gray-500 flex items-center justify-center h-full">
+              <p>Izaberite lekciju da vidite detalje i kvizove.</p>
             </div>
-          </div>
+          )}
         </div>
       </main>
     </div>

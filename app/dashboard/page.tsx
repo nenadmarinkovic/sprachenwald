@@ -10,7 +10,7 @@ import {
   query,
 } from 'firebase/firestore';
 import Link from 'next/link';
-import { LogOut } from 'lucide-react';
+import { LogOut, User as UserIcon } from 'lucide-react';
 
 interface Lesson {
   id: string;
@@ -44,10 +44,7 @@ const DashboardPage = () => {
   const fetchLessons = async () => {
     try {
       const lessonsCollection = collection(db, 'lessons');
-      const q = query(
-        lessonsCollection,
-        orderBy('createdAt', 'desc')
-      );
+      const q = query(lessonsCollection, orderBy('order', 'asc'));
       const querySnapshot = await getDocs(q);
       const lessonsData = querySnapshot.docs.map(
         (doc) =>
@@ -94,6 +91,13 @@ const DashboardPage = () => {
             <span className="text-gray-700">
               Dobrodošli, {user.displayName || user.email}
             </span>
+            <Link
+              href="/profile"
+              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+            >
+              <UserIcon size={16} />
+              <span>Profil</span>
+            </Link>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
