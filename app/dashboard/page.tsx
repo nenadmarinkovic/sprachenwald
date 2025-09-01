@@ -88,7 +88,7 @@ const DashboardPage = () => {
       <header className="bg-white shadow-sm">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-green-600">
-            Sprachenwald
+            Dashboard
           </h1>
           <div className="flex items-center gap-4">
             <span className="text-gray-700">

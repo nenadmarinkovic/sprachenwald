@@ -18,7 +18,6 @@ import {
   LayoutDashboard,
 } from 'lucide-react';
 
-// Define Quiz and Lesson types for clarity
 interface MultipleChoiceQuiz {
   type: 'multiple-choice';
   question: string;
@@ -191,7 +190,6 @@ const AdminPage = () => {
 
     try {
       if (selectedLessonId) {
-        // Update existing lesson
         const lessonRef = doc(db, 'lessons', selectedLessonId);
         await updateDoc(
           lessonRef,
@@ -199,14 +197,13 @@ const AdminPage = () => {
         );
         setSuccess('Lekcija je uspešno ažurirana!');
       } else {
-        // Add new lesson
         const lessonsCollection = collection(db, 'lessons');
         await addDoc(lessonsCollection, {
           ...lessonData,
           createdAt: Timestamp.now(),
         });
         setSuccess('Lekcija je uspešno dodata!');
-        handleSelectLesson(null); // Clear form after adding
+        handleSelectLesson(null);
       }
     } catch (err) {
       console.error('Greška pri čuvanju lekcije:', err);

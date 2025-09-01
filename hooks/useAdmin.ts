@@ -8,7 +8,6 @@ export function useAdmin() {
 
   useEffect(() => {
     if (isUserLoading) {
-      // Don't draw any conclusions until the user state is resolved.
       return;
     }
 
@@ -18,9 +17,8 @@ export function useAdmin() {
       return;
     }
 
-    // Check for the admin custom claim.
     user
-      .getIdTokenResult(true) // Force refresh the token
+      .getIdTokenResult(true)
       .then((idTokenResult) => {
         setIsAdmin(!!idTokenResult.claims.admin);
         setIsLoading(false);
