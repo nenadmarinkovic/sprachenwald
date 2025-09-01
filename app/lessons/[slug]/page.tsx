@@ -8,196 +8,54 @@ import {
   query,
   onSnapshot,
   orderBy,
+  addDoc,
   Timestamp,
 } from 'firebase/firestore';
-import { BookOpen, CheckCircle2, XCircle } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
+import {
+  LessonWithId,
+  LessonContentBlock,
+  MultipleChoiceQuiz,
+  FillInTheBlankQuiz,
+  HedgehogMessage,
+} from '@/types/sprachenwald';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useUser } from '@/hooks/useUser';
 
-interface MultipleChoiceQuizData {
-  type: 'multiple-choice';
-  question: string;
-  options: string[];
-  correctAnswer: string;
-}
-
-interface FillInTheBlankQuizData {
-  type: 'fill-in-the-blank';
-  question: string;
-  correctAnswer: string;
-}
-
-type QuizData = MultipleChoiceQuizData | FillInTheBlankQuizData;
-
-interface Lesson {
-  title: string;
-  content: string;
-  slug: string;
-  quizzes: QuizData[];
-  createdAt: Timestamp;
-}
-
-interface LessonWithId extends Lesson {
-  id: string;
-}
-
-const MultipleChoiceQuiz = ({
+const MultipleChoiceQuizComponent = ({
   quiz,
   index,
 }: {
-  quiz: MultipleChoiceQuizData;
+  quiz: MultipleChoiceQuiz;
   index: number;
 }) => {
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(
-    null
-  );
-  const [isAnswerChecked, setIsAnswerChecked] = useState(false);
-  const isCorrect = selectedAnswer === quiz.correctAnswer;
-
-  const handleCheckAnswer = () => {
-    if (selectedAnswer) setIsAnswerChecked(true);
-  };
-
   return (
     <div className="p-6 mb-6 bg-white rounded-xl border border-gray-200 shadow-sm">
       <h3 className="text-lg font-semibold mb-4">
         {index + 1}. {quiz.question}
       </h3>
-      <div className="space-y-3">
-        {quiz.options.map(
-          (option, idx) =>
-            option && (
-              <div
-                key={idx}
-                className={`flex items-center p-3 rounded-md transition-colors ${
-                  isAnswerChecked && option === quiz.correctAnswer
-                    ? 'bg-green-100'
-                    : ''
-                } ${
-                  isAnswerChecked &&
-                  selectedAnswer === option &&
-                  !isCorrect
-                    ? 'bg-red-100'
-                    : ''
-                }`}
-              >
-                <input
-                  type="radio"
-                  name={`${quiz.question}-${index}`}
-                  id={`${quiz.question}-${index}-${idx}`}
-                  value={option}
-                  onChange={(e) => setSelectedAnswer(e.target.value)}
-                  disabled={isAnswerChecked}
-                  className="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500"
-                />
-                <label
-                  htmlFor={`${quiz.question}-${index}-${idx}`}
-                  className="ml-3 block text-md text-gray-800"
-                >
-                  {option}
-                </label>
-              </div>
-            )
-        )}
-      </div>
-      <button
-        onClick={handleCheckAnswer}
-        disabled={!selectedAnswer || isAnswerChecked}
-        className="mt-5 px-5 py-2 bg-green-600 text-white text-sm font-medium rounded-lg disabled:bg-gray-400 hover:bg-green-700 transition-colors"
-      >
-        Proveri
-      </button>
-      {isAnswerChecked && (
-        <div
-          className={`mt-4 p-3 rounded-lg text-sm flex items-center gap-2 ${
-            isCorrect
-              ? 'bg-green-100 text-green-900'
-              : 'bg-red-100 text-red-900'
-          }`}
-        >
-          {isCorrect ? (
-            <CheckCircle2 className="h-5 w-5" />
-          ) : (
-            <XCircle className="h-5 w-5" />
-          )}
-          <span>
-            {isCorrect
-              ? 'Tačno!'
-              : `Netačno. Tačan odgovor je: ${quiz.correctAnswer}`}
-          </span>
-        </div>
-      )}
     </div>
   );
 };
 
-const FillInTheBlankQuiz = ({
+const FillInTheBlankQuizComponent = ({
   quiz,
   index,
 }: {
-  quiz: FillInTheBlankQuizData;
+  quiz: FillInTheBlankQuiz;
   index: number;
 }) => {
-  const [userAnswer, setUserAnswer] = useState('');
-  const [isAnswerChecked, setIsAnswerChecked] = useState(false);
-  const isCorrect =
-    userAnswer.trim().toLowerCase() ===
-    quiz.correctAnswer.toLowerCase();
-
-  const handleCheckAnswer = () => {
-    if (userAnswer) setIsAnswerChecked(true);
-  };
-
-  const questionText = quiz.question.split('___').map((part, i) =>
-    i === 0 ? (
-      part
-    ) : (
-      <React.Fragment key={i}>
-        <input
-          type="text"
-          value={userAnswer}
-          onChange={(e) => setUserAnswer(e.target.value)}
-          disabled={isAnswerChecked}
-          className="inline-block w-40 mx-2 px-2 py-1 border-b-2 border-gray-300 focus:border-green-500 outline-none bg-transparent"
-        />
-        {part}
-      </React.Fragment>
-    )
-  );
-
   return (
     <div className="p-6 mb-6 bg-white rounded-xl border border-gray-200 shadow-sm">
-      <label
-        className="text-lg font-semibold mb-4 block"
-        htmlFor={`fill-blank-${index}`}
-      >
-        {index + 1}. {questionText}
-      </label>
-      <button
-        onClick={handleCheckAnswer}
-        disabled={!userAnswer || isAnswerChecked}
-        className="mt-5 px-5 py-2 bg-green-600 text-white text-sm font-medium rounded-lg disabled:bg-gray-400 hover:bg-green-700 transition-colors"
-      >
-        Proveri
-      </button>
-      {isAnswerChecked && (
-        <div
-          className={`mt-4 p-3 rounded-lg text-sm flex items-center gap-2 ${
-            isCorrect
-              ? 'bg-green-100 text-green-900'
-              : 'bg-red-100 text-red-900'
-          }`}
-        >
-          {isCorrect ? (
-            <CheckCircle2 className="h-5 w-5" />
-          ) : (
-            <XCircle className="h-5 w-5" />
-          )}
-          <span>
-            {isCorrect
-              ? 'Tačno!'
-              : `Netačno. Tačan odgovor je: ${quiz.correctAnswer}`}
-          </span>
-        </div>
-      )}
+      <h3 className="text-lg font-semibold mb-4">
+        {index + 1}. {quiz.question.replace(/___/g, '______')}
+      </h3>
     </div>
   );
 };
@@ -205,17 +63,20 @@ const FillInTheBlankQuiz = ({
 export default function LessonPageLayout() {
   const params = useParams();
   const slug = params.slug as string;
+  const { user } = useUser();
 
   const [allLessons, setAllLessons] = useState<LessonWithId[]>([]);
-  const [currentLesson, setCurrentLesson] = useState<Lesson | null>(
-    null
-  );
+  const [currentLesson, setCurrentLesson] =
+    useState<LessonWithId | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedWords, setSelectedWords] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     const lessonsQuery = query(
       collection(db, 'lessons'),
-      orderBy('createdAt', 'asc')
+      orderBy('order', 'asc')
     );
     const unsubscribe = onSnapshot(
       lessonsQuery,
@@ -224,7 +85,6 @@ export default function LessonPageLayout() {
           (doc) => ({ id: doc.id, ...doc.data() } as LessonWithId)
         );
         setAllLessons(lessonsData);
-
         const activeLesson = lessonsData.find((l) => l.slug === slug);
         setCurrentLesson(activeLesson || null);
         setIsLoading(false);
@@ -234,80 +94,240 @@ export default function LessonPageLayout() {
         setIsLoading(false);
       }
     );
-
     return () => unsubscribe();
   }, [slug]);
 
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="text-center text-gray-500">
-          Učitavanje lekcije...
-        </div>
-      );
-    }
+  const handleWordSelection = (germanWord: string) => {
+    setSelectedWords((prev) => ({
+      ...prev,
+      [germanWord]: !prev[germanWord],
+    }));
+  };
 
-    if (!currentLesson) {
+  const handleAddVocabulary = async () => {
+    if (!user || !currentLesson || !currentLesson.vocabulary) return;
+    const wordsToAdd = currentLesson.vocabulary.filter(
+      (word) => selectedWords[word.german]
+    );
+
+    for (const word of wordsToAdd) {
+      await addDoc(collection(db, 'userVocabulary'), {
+        ...word,
+        userId: user.uid,
+        lessonId: currentLesson.id,
+        addedAt: Timestamp.now(),
+        type: 'ostalo',
+      });
+    }
+    alert(`${wordsToAdd.length} reči je dodato u vaš Sprachgarten!`);
+    setSelectedWords({});
+  };
+
+  const renderInteractiveText = (
+    block: LessonContentBlock,
+    blockKey: number
+  ) => (
+    <div key={blockKey} className="mb-6 leading-relaxed">
+      <p className="text-lg text-gray-800">
+        {block.german.map((word, index) => (
+          <Popover key={index}>
+            <PopoverTrigger asChild>
+              <span className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1">
+                {word.german}{' '}
+              </span>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto">
+              <div className="p-2">
+                <p className="font-bold text-lg">{word.german}</p>
+                <p className="text-md text-gray-600">
+                  {word.serbian}
+                </p>
+                {word.info && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {word.info}
+                  </p>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        ))}
+      </p>
+      <p className="text-md text-gray-500 mt-2">{block.serbian}</p>
+    </div>
+  );
+
+  const renderHedgehog = (
+    block: HedgehogMessage,
+    blockKey: number
+  ) => (
+    <div
+      key={blockKey}
+      className="my-8 flex items-center gap-4 bg-amber-100 p-4 rounded-lg"
+    >
+      <span className="text-4xl">🦔</span>
+      <p className="text-amber-900 font-medium">{block.text}</p>
+    </div>
+  );
+
+  const renderContent = () => {
+    if (isLoading)
       return (
-        <div className="text-center text-gray-500">
-          Lekcija nije pronađena. Molimo izaberite lekciju iz menija.
+        <div className="text-center p-12">Učitavanje lekcije...</div>
+      );
+    if (!currentLesson)
+      return (
+        <div className="text-center p-12">
+          Lekcija nije pronađena.
         </div>
       );
-    }
 
     return (
       <>
-        <h1 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
+        <h1 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900">
           {currentLesson.title}
         </h1>
-        <div
-          className="prose lg:prose-lg max-w-none text-gray-700 mb-8"
-          dangerouslySetInnerHTML={{
-            __html: currentLesson.content.replace(/\n/g, '<br />'),
-          }}
-        />
 
-        {currentLesson.quizzes &&
-          currentLesson.quizzes.length > 0 && (
-            <div className="mt-10">
-              <h2 className="text-2xl md:text-3xl font-bold mb-6 border-t pt-6 text-gray-900">
-                Kviz
+        {Array.isArray(currentLesson.content) ? (
+          currentLesson.content.map((block, index) => {
+            switch (block.type) {
+              case 'text':
+                return renderInteractiveText(
+                  block as LessonContentBlock,
+                  index
+                );
+              case 'hedgehog':
+                return renderHedgehog(
+                  block as HedgehogMessage,
+                  index
+                );
+              default:
+                return null;
+            }
+          })
+        ) : (
+          <div
+            className="prose lg:prose-lg max-w-none text-gray-700 mb-8"
+            dangerouslySetInnerHTML={{
+              __html: String(currentLesson.content).replace(
+                /\n/g,
+                '<br />'
+              ),
+            }}
+          />
+        )}
+
+        {currentLesson.vocabulary &&
+          Array.isArray(currentLesson.vocabulary) &&
+          currentLesson.vocabulary.length > 0 && (
+            <div className="mt-12 border-t pt-8">
+              <h2 className="text-2xl font-bold mb-4">
+                Dodaj u Rečnik (Sprachgarten)
               </h2>
-              {currentLesson.quizzes.map((quiz, index) => {
-                switch (quiz.type) {
-                  case 'multiple-choice':
-                    return (
-                      <MultipleChoiceQuiz
+              {user ? (
+                <>
+                  <div className="space-y-2">
+                    {currentLesson.vocabulary.map((word, index) => (
+                      <div
                         key={index}
-                        index={index}
-                        quiz={quiz as MultipleChoiceQuizData}
-                      />
-                    );
-                  case 'fill-in-the-blank':
-                    return (
-                      <FillInTheBlankQuiz
-                        key={index}
-                        index={index}
-                        quiz={quiz as FillInTheBlankQuizData}
-                      />
-                    );
-                  default:
-                    return null;
-                }
-              })}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`vocab-${index}`}
+                          onCheckedChange={() =>
+                            handleWordSelection(word.german)
+                          }
+                          checked={!!selectedWords[word.german]}
+                        />
+                        <label
+                          htmlFor={`vocab-${index}`}
+                          className="flex-grow cursor-pointer"
+                        >
+                          <span className="font-semibold">
+                            {word.german}
+                          </span>{' '}
+                          - <span>{word.serbian}</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    onClick={handleAddVocabulary}
+                    className="mt-6"
+                    disabled={Object.values(selectedWords).every(
+                      (v) => !v
+                    )}
+                  >
+                    Dodaj selektovano
+                  </Button>
+                </>
+              ) : (
+                <div className="p-4 bg-gray-100 rounded-md text-center">
+                  <p className="text-gray-700">
+                    <Link
+                      href="/login"
+                      className="font-bold text-green-600 hover:underline"
+                    >
+                      Prijavite se
+                    </Link>{' '}
+                    ili{' '}
+                    <Link
+                      href="/signup"
+                      className="font-bold text-green-600 hover:underline"
+                    >
+                      registrujte
+                    </Link>{' '}
+                    da biste sačuvali reči u svoj lični rečnik.
+                  </p>
+                </div>
+              )}
             </div>
           )}
+
+        {currentLesson.quizzes?.length > 0 && (
+          <div className="mt-12">
+            <h2 className="text-2xl font-bold mb-6 border-t pt-8">
+              Kviz
+            </h2>
+            {currentLesson.quizzes.map((quiz, index) => {
+              switch (quiz.type) {
+                case 'multiple-choice':
+                  return (
+                    <MultipleChoiceQuizComponent
+                      key={index}
+                      index={index}
+                      quiz={quiz}
+                    />
+                  );
+                case 'fill-in-the-blank':
+                  return (
+                    <FillInTheBlankQuizComponent
+                      key={index}
+                      index={index}
+                      quiz={quiz}
+                    />
+                  );
+                default:
+                  return (
+                    <div
+                      key={index}
+                      className="p-4 bg-yellow-100 rounded-md"
+                    >
+                      Tip kviza još uvek nije podržan.
+                    </div>
+                  );
+              }
+            })}
+          </div>
+        )}
       </>
     );
   };
 
   return (
-    <div className="flex h-[calc(100vh-65px)]">
-      {' '}
+    <div className="flex flex-col md:flex-row h-[calc(100vh-65px)]">
       <aside className="w-full md:w-1/4 bg-gray-50 border-r p-4 overflow-y-auto">
         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <BookOpen size={20} />
-          Lekcije
+          <BookOpen size={20} /> Lekcije
         </h2>
         <nav className="space-y-1">
           {allLessons.map((lesson) => (
