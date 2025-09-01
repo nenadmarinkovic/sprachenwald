@@ -1,37 +1,58 @@
-import * as functions from 'firebase-functions';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { setGlobalOptions } from 'firebase-functions';
 
 admin.initializeApp();
 
-// Callable function to grant a user admin privileges.
-export const addAdminRole = functions.https.onCall(
-  async (data, context) => {
-    // Security Check: Ensure the user calling the function is an authenticated admin.
-    // This single check handles both authentication and authorization.
-    if (!context.auth || context.auth.token.admin !== true) {
-      throw new functions.https.HttpsError(
-        'permission-denied',
-        'Request not authorized. User must be an admin to perform this action.'
-      );
-    }
+setGlobalOptions({ maxInstances: 10 });
 
-    const email = data.email;
-    try {
-      // Find the user account by email.
-      const user = await admin.auth().getUserByEmail(email);
-
-      // Set the custom claim { admin: true } on their account.
-      await admin
-        .auth()
-        .setCustomUserClaims(user.uid, { admin: true });
-
-      return { message: `Success! ${email} has been made an admin.` };
-    } catch (error) {
-      console.error(error);
-      throw new functions.https.HttpsError(
-        'internal',
-        'An error occurred.'
-      );
-    }
+export const addAdminRole = onCall(async (request) => {
+  if (request.auth?.token?.admin !== true) {
+    logger.warn(
+      'Unauthorized attempt to make an admin by:',
+      request.auth?.uid
+    );
+    throw new HttpsError(
+      'permission-denied',
+      'Request not authorized. User must be an admin to perform this action.'
+    );
   }
-);
+
+  const email = request.data.email;
+
+  if (typeof email !== 'string' || email.length === 0) {
+    throw new HttpsError(
+      'invalid-argument',
+      "The function must be called with a valid 'email' argument."
+    );
+  }
+
+  try {
+    const user = await admin.auth().getUserByEmail(email);
+
+    if (user.customClaims?.admin === true) {
+      logger.info(`${email} is already an admin.`);
+      return { message: `${email} is already an admin.` };
+    }
+
+    await admin.auth().setCustomUserClaims(user.uid, { admin: true });
+
+    logger.info(`Successfully made ${email} an admin.`);
+    return { message: `Success! ${email} has been made an admin.` };
+  } catch (error: any) {
+    logger.error('Error setting custom claim:', error);
+
+    if (error.code === 'auth/user-not-found') {
+      throw new HttpsError(
+        'not-found',
+        `The user with the email ${email} was not found.`
+      );
+    }
+
+    throw new HttpsError(
+      'internal',
+      'An error occurred while trying to make a user an admin.'
+    );
+  }
+});
