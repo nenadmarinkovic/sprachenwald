@@ -17,7 +17,7 @@ const Header = () => {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      router.push('/'); // Redirect to homepage after logout
+      router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -28,7 +28,7 @@ const Header = () => {
       <nav className="container mx-auto px-6 py-4 flex justify-between items-center">
         <div className="flex items-center">
           <Sprout className="h-8 w-8 text-green-600 mr-2" />
-          <Link href="/" className="text-2xl font-bold text-gray-800">
+          <Link href="/" className="text-xl font-bold text-gray-800">
             Sprachenwald
           </Link>
         </div>

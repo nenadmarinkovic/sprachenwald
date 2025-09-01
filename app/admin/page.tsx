@@ -28,13 +28,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Card,
   CardContent,
   CardDescription,
@@ -44,35 +37,9 @@ import {
 import { SortableLessonItem } from '@/components/SortableLessonItem';
 import { arrayMove } from '@dnd-kit/sortable';
 import { DragEndEvent } from '@dnd-kit/core';
+import { Quiz, LessonWithId } from '@/types/quizzes';
+import { AddQuizDialog } from '@/components/AddQuizDialog';
 import { DndContextProvider } from '@/context/DnDContextProvider';
-
-interface MultipleChoiceQuiz {
-  type: 'multiple-choice';
-  question: string;
-  options: string[];
-  correctAnswer: string;
-}
-
-interface FillInTheBlankQuiz {
-  type: 'fill-in-the-blank';
-  question: string;
-  correctAnswer: string;
-}
-
-type Quiz = MultipleChoiceQuiz | FillInTheBlankQuiz;
-
-interface Lesson {
-  title: string;
-  content: string;
-  slug: string;
-  quizzes: Quiz[];
-  createdAt: Timestamp;
-  order: number;
-}
-
-interface LessonWithId extends Lesson {
-  id: string;
-}
 
 const AdminPage = () => {
   const [allLessons, setAllLessons] = useState<LessonWithId[]>([]);
@@ -83,19 +50,10 @@ const AdminPage = () => {
   const [content, setContent] = useState('');
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
 
-  const [quizType, setQuizType] = useState<
-    'multiple-choice' | 'fill-in-the-blank'
-  >('multiple-choice');
-  const [currentQuestion, setCurrentQuestion] = useState('');
-  const [mcOptions, setMcOptions] = useState(['', '', '', '']);
-  const [correctMcAnswer, setCorrectMcAnswer] = useState('');
-  const [fibCorrectAnswer, setFibCorrectAnswer] = useState('');
-
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLessonDialogOpen, setIsLessonDialogOpen] = useState(false);
-  const [isQuizDialogOpen, setIsQuizDialogOpen] = useState(false);
 
   useEffect(() => {
     const lessonsQuery = query(
@@ -112,15 +70,13 @@ const AdminPage = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedLessonId) {
-      const selectedLesson = allLessons.find(
-        (lesson) => lesson.id === selectedLessonId
-      );
-      if (selectedLesson) {
-        setTitle(selectedLesson.title);
-        setContent(selectedLesson.content);
-        setQuizzes(selectedLesson.quizzes || []);
-      }
+    const selectedLesson = allLessons.find(
+      (l) => l.id === selectedLessonId
+    );
+    if (selectedLesson) {
+      setTitle(selectedLesson.title);
+      setContent(selectedLesson.content);
+      setQuizzes(selectedLesson.quizzes || []);
     } else {
       setTitle('');
       setContent('');
@@ -150,8 +106,8 @@ const AdminPage = () => {
     }
   };
 
-  const createSlug = (title: string) => {
-    return title
+  const createSlug = (title: string) =>
+    title
       .toLowerCase()
       .replace(/đ/g, 'dj')
       .replace(/š/g, 's')
@@ -160,73 +116,6 @@ const AdminPage = () => {
       .replace(/ž/g, 'z')
       .replace(/ /g, '-')
       .replace(/[^\w-]+/g, '');
-  };
-
-  const handleOptionChange = (index: number, value: string) => {
-    const newOptions = [...mcOptions];
-    newOptions[index] = value;
-    setMcOptions(newOptions);
-  };
-
-  const handleAddQuiz = async () => {
-    if (!currentQuestion.trim() || !selectedLessonId) return;
-
-    let newQuiz: Quiz | null = null;
-    if (quizType === 'multiple-choice') {
-      const filteredOptions = mcOptions.filter(
-        (opt) => opt.trim() !== ''
-      );
-      if (
-        filteredOptions.length < 2 ||
-        !correctMcAnswer.trim() ||
-        !filteredOptions.includes(correctMcAnswer)
-      ) {
-        alert(
-          'Please provide at least two options and select a valid correct answer.'
-        );
-        return;
-      }
-      newQuiz = {
-        type: 'multiple-choice',
-        question: currentQuestion,
-        options: filteredOptions,
-        correctAnswer: correctMcAnswer,
-      };
-    } else {
-      if (!fibCorrectAnswer.trim()) {
-        alert('Please provide a correct answer.');
-        return;
-      }
-      newQuiz = {
-        type: 'fill-in-the-blank',
-        question: currentQuestion,
-        correctAnswer: fibCorrectAnswer,
-      };
-    }
-
-    if (newQuiz) {
-      const updatedQuizzes = [...quizzes, newQuiz];
-      const lessonRef = doc(db, 'lessons', selectedLessonId);
-      await updateDoc(lessonRef, { quizzes: updatedQuizzes });
-
-      setQuizzes(updatedQuizzes);
-      setCurrentQuestion('');
-      setMcOptions(['', '', '', '']);
-      setCorrectMcAnswer('');
-      setFibCorrectAnswer('');
-      setIsQuizDialogOpen(false);
-    }
-  };
-
-  const handleRemoveQuiz = async (indexToRemove: number) => {
-    if (!selectedLessonId) return;
-    const updatedQuizzes = quizzes.filter(
-      (_, index) => index !== indexToRemove
-    );
-    const lessonRef = doc(db, 'lessons', selectedLessonId);
-    await updateDoc(lessonRef, { quizzes: updatedQuizzes });
-    setQuizzes(updatedQuizzes);
-  };
 
   const handleOpenLessonDialog = (lessonId: string | null) => {
     setSelectedLessonId(lessonId);
@@ -285,6 +174,25 @@ const AdminPage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAddQuiz = async (newQuiz: Quiz) => {
+    if (!selectedLessonId) return;
+
+    const updatedQuizzes = [...quizzes, newQuiz];
+    const lessonRef = doc(db, 'lessons', selectedLessonId);
+    await updateDoc(lessonRef, { quizzes: updatedQuizzes });
+    setQuizzes(updatedQuizzes);
+  };
+
+  const handleRemoveQuiz = async (indexToRemove: number) => {
+    if (!selectedLessonId) return;
+    const updatedQuizzes = quizzes.filter(
+      (_, index) => index !== indexToRemove
+    );
+    const lessonRef = doc(db, 'lessons', selectedLessonId);
+    await updateDoc(lessonRef, { quizzes: updatedQuizzes });
+    setQuizzes(updatedQuizzes);
   };
 
   const selectedLessonForQuiz = allLessons.find(
@@ -417,134 +325,7 @@ const AdminPage = () => {
                     Još nema dodatih kvizova.
                   </p>
                 )}
-                <Dialog
-                  open={isQuizDialogOpen}
-                  onOpenChange={setIsQuizDialogOpen}
-                >
-                  <DialogTrigger asChild>
-                    <Button className="w-full mt-4">
-                      <PlusCircle size={16} className="mr-2" /> Dodaj
-                      novi kviz
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Dodaj novi kviz</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="quizType">Tip kviza</Label>
-                        <Select
-                          onValueChange={(
-                            value:
-                              | 'multiple-choice'
-                              | 'fill-in-the-blank'
-                          ) => setQuizType(value)}
-                          defaultValue={quizType}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Izaberite tip" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="multiple-choice">
-                              Višestruki izbor
-                            </SelectItem>
-                            <SelectItem value="fill-in-the-blank">
-                              Popuni prazninu
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="currentQuestion">
-                          Pitanje
-                        </Label>
-                        {quizType === 'fill-in-the-blank' && (
-                          <p className="text-xs text-muted-foreground">
-                            Koristite ___ da označite prazninu.
-                          </p>
-                        )}
-                        <Input
-                          id="currentQuestion"
-                          value={currentQuestion}
-                          onChange={(e) =>
-                            setCurrentQuestion(e.target.value)
-                          }
-                        />
-                      </div>
-
-                      {quizType === 'multiple-choice' && (
-                        <div className="space-y-3">
-                          {mcOptions.map((option, index) => (
-                            <div key={index} className="space-y-2">
-                              <Label htmlFor={`option-${index}`}>
-                                Opcija {index + 1}
-                              </Label>
-                              <Input
-                                id={`option-${index}`}
-                                value={option}
-                                onChange={(e) =>
-                                  handleOptionChange(
-                                    index,
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </div>
-                          ))}
-                          <div className="space-y-2">
-                            <Label htmlFor="correctMcAnswer">
-                              Tačan odgovor
-                            </Label>
-                            <Select
-                              onValueChange={setCorrectMcAnswer}
-                              value={correctMcAnswer}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Odaberite tačan odgovor" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {mcOptions
-                                  .filter((opt) => opt)
-                                  .map((opt, i) => (
-                                    <SelectItem key={i} value={opt}>
-                                      {opt}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      )}
-
-                      {quizType === 'fill-in-the-blank' && (
-                        <div className="space-y-2">
-                          <Label htmlFor="fibCorrectAnswer">
-                            Tačan odgovor
-                          </Label>
-                          <Input
-                            id="fibCorrectAnswer"
-                            value={fibCorrectAnswer}
-                            onChange={(e) =>
-                              setFibCorrectAnswer(e.target.value)
-                            }
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <DialogFooter>
-                      <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                          Cancel
-                        </Button>
-                      </DialogClose>
-                      <Button onClick={handleAddQuiz} type="button">
-                        Dodaj kviz
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                <AddQuizDialog onAddQuiz={handleAddQuiz} />
               </CardContent>
             </Card>
           ) : (
