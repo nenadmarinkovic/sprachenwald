@@ -2,26 +2,65 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+} from 'firebase/firestore';
+import Link from 'next/link';
 import { LogOut } from 'lucide-react';
+
+interface Lesson {
+  id: string;
+  title: string;
+  slug: string;
+}
 
 const DashboardPage = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        router.push('/login');
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (currentUser) => {
+        if (currentUser) {
+          setUser(currentUser);
+          await fetchLessons();
+        } else {
+          router.push('/login');
+        }
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    });
+    );
 
     return () => unsubscribe();
   }, [router]);
+
+  const fetchLessons = async () => {
+    try {
+      const lessonsCollection = collection(db, 'lessons');
+      const q = query(
+        lessonsCollection,
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const lessonsData = querySnapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          } as Lesson)
+      );
+      setLessons(lessonsData);
+    } catch (error) {
+      console.error('Greška prilikom preuzimanja lekcija:', error);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -70,9 +109,31 @@ const DashboardPage = () => {
           Kontrolna tabla
         </h2>
         <div className="p-8 bg-white rounded-2xl shadow-lg">
-          <p className="text-gray-600">
-            Ovde će biti vaše lekcije, kvizovi i napredak.
-          </p>
+          <h3 className="text-2xl font-bold text-gray-800 mb-4">
+            Dostupne lekcije
+          </h3>
+          {lessons.length > 0 ? (
+            <ul className="space-y-4">
+              {lessons.map((lesson) => (
+                <li
+                  key={lesson.id}
+                  className="p-4 border rounded-lg hover:bg-gray-100"
+                >
+                  <Link
+                    href={`/lessons/${lesson.slug}`}
+                    className="font-bold text-xl text-green-600"
+                    prefetch
+                  >
+                    {lesson.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-600">
+              Trenutno nema dostupnih lekcija.
+            </p>
+          )}
         </div>
       </main>
     </div>
