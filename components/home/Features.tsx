@@ -10,7 +10,7 @@ const FeatureCard = ({
   title: string;
   description: string;
 }) => (
-  <div className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+  <div className="bg-white p-8 rounded-xl border">
     <div className="text-green-600 mb-4">{icon}</div>
     <h3 className="text-black text-xl font-bold mb-2">{title}</h3>
     <p className="text-gray-600">{description}</p>

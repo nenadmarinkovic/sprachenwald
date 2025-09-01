@@ -3,11 +3,9 @@ import React from 'react';
 import { Mail, Lock, Chrome, User } from 'lucide-react';
 
 const SignupPage = () => {
-  // TODO: Add state and Firebase logic for handling registration
-
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-200px)] bg-gray-50 py-12">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl shadow-lg">
+      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl ">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-800">
             Kreirajte nalog

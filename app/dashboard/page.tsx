@@ -108,7 +108,7 @@ const DashboardPage = () => {
         <h2 className="text-3xl font-bold text-gray-800 mb-6">
           Kontrolna tabla
         </h2>
-        <div className="p-8 bg-white rounded-2xl shadow-lg">
+        <div className="p-8 bg-white rounded-2xl border">
           <h3 className="text-2xl font-bold text-gray-800 mb-4">
             Dostupne lekcije
           </h3>

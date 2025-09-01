@@ -55,7 +55,7 @@ const LoginPage = () => {
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-200px)] bg-gray-50">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl shadow-lg">
+      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl ">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-800">
             Prijava

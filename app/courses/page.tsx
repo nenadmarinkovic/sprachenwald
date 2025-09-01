@@ -15,7 +15,7 @@ const CoursesPage = () => {
         </div>
       </header>
       <main className="container mx-auto px-6 py-8">
-        <div className="p-8 bg-white rounded-2xl shadow-lg">
+        <div className="p-8 bg-white rounded-2xl border">
           <div className="flex items-center justify-center text-center text-gray-500">
             <BookMarked className="w-12 h-12 mb-4" />
           </div>
