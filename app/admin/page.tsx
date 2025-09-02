@@ -14,7 +14,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
-  PlusCircle,
   LayoutDashboard,
   BookCopy,
   Puzzle,
@@ -22,21 +21,7 @@ import {
   CheckCircle,
   Mic,
 } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
+
 import {
   Card,
   CardContent,
@@ -49,10 +34,35 @@ import {
   LessonBlock,
   TextualLessonBlock,
   VideoLessonBlock,
-  LessonContentBlock,
+  QuizLessonBlock,
+  VocabularyLessonBlock,
+  GrammarLessonBlock,
 } from '@/types/sprachenwald';
+import {
+  DndContext,
+  DragEndEvent,
+  closestCenter,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { SortableLessonItem } from '@/components/SortableLessonItem';
 
-const BLOCK_TYPES = [
+import { AddLessonDialog } from '@/components/admin/AddLessonDialog';
+import { EditTextBlockDialog } from '@/components/admin/EditTextBlockDialog';
+import { EditVideoBlockDialog } from '@/components/admin/EditVideoBlockDialog';
+import { EditQuizBlockDialog } from '@/components/admin/EditQuizBlockDialog';
+import { EditVocabularyBlockDialog } from '@/components/admin/EditVocabularyBlockDialog';
+import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
+import { SortableBlockItem } from '@/components/admin/SortableBlockItem';
+
+const BLOCK_TYPES: Array<{
+  id: LessonBlock['type'];
+  label: string;
+  icon: React.ReactNode;
+}> = [
   { id: 'text', label: 'Textual Lesson', icon: <BookCopy /> },
   { id: 'grammar', label: 'Grammar', icon: <Puzzle /> },
   { id: 'video', label: 'Video', icon: <Film /> },
@@ -60,273 +70,95 @@ const BLOCK_TYPES = [
   { id: 'vocabulary', label: 'Vocabulary', icon: <Mic /> },
 ];
 
-const AddLessonDialog = ({
-  onSave,
-}: {
-  onSave: (title: string, selectedBlockTypes: string[]) => void;
-}) => {
-  const [title, setTitle] = useState('');
-  const [selectedBlocks, setSelectedBlocks] = useState(
-    new Set<string>()
-  );
-  const [isOpen, setIsOpen] = useState(false);
+const createSlug = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]+/g, '');
 
-  const handleBlockTypeToggle = (blockType: string) => {
-    const newSelection = new Set(selectedBlocks);
-    if (newSelection.has(blockType)) {
-      newSelection.delete(blockType);
-    } else {
-      newSelection.add(blockType);
-    }
-    setSelectedBlocks(newSelection);
-  };
+type NewTextual = Omit<TextualLessonBlock, 'id'>;
+type NewQuiz = Omit<QuizLessonBlock, 'id'>;
+type NewVideo = Omit<VideoLessonBlock, 'id'>;
+type NewGrammar = Omit<GrammarLessonBlock, 'id'>;
+type NewVocabulary = Omit<VocabularyLessonBlock, 'id'>;
 
-  const handleSubmit = () => {
-    onSave(title, Array.from(selectedBlocks));
-    setTitle('');
-    setSelectedBlocks(new Set());
-    setIsOpen(false);
-  };
+type NewLessonBlockUnion =
+  | NewTextual
+  | NewQuiz
+  | NewVideo
+  | NewGrammar
+  | NewVocabulary;
 
-  return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button className="w-full mb-4">
-          <PlusCircle size={16} className="mr-2" /> Nova Lekcija
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[625px]">
-        <DialogHeader>
-          <DialogTitle>Dodaj Novu Lekciju</DialogTitle>
-        </DialogHeader>
-        <div className="py-4 space-y-6">
-          <div>
-            <Label htmlFor="lesson-title">Naslov Lekcije</Label>
-            <Input
-              id="lesson-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Struktura Lekcije (Blokovi)</Label>
-            <div className="grid grid-cols-2 gap-4 mt-2">
-              {BLOCK_TYPES.map((blockType) => (
-                <div
-                  key={blockType.id}
-                  className="flex items-center space-x-2 p-3 border rounded-md"
-                >
-                  <Checkbox
-                    id={blockType.id}
-                    checked={selectedBlocks.has(blockType.id)}
-                    onCheckedChange={() =>
-                      handleBlockTypeToggle(blockType.id)
-                    }
-                  />
-                  <Label
-                    htmlFor={blockType.id}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    {blockType.icon} {blockType.label}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button onClick={handleSubmit}>
-            Sačuvaj Lekciju i Blokove
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
+function buildNewBlock(params: {
+  blockType: LessonBlock['type'];
+  lessonId: string;
+  lessonTitle: string;
+  order: number;
+  title: string;
+  slug: string;
+}): NewLessonBlockUnion {
+  const { blockType, lessonId, lessonTitle, order, title, slug } =
+    params;
 
-const EditTextBlockDialog = ({
-  block,
-  onSave,
-  isOpen,
-  onOpenChange,
-}: {
-  block: TextualLessonBlock;
-  onSave: (id: string, data: Partial<LessonBlock>) => void;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) => {
-  const [title, setTitle] = useState(block.title);
-  const [germanContent, setGermanContent] = useState(() =>
-    block.content
-      .map((c) =>
-        c.type === 'text'
-          ? c.german.map((w) => w.german).join(' ')
-          : ''
-      )
-      .join('\n')
-  );
-  const [serbianContent, setSerbianContent] = useState(() =>
-    block.content
-      .map((c) => (c.type === 'text' ? c.serbian : ''))
-      .join('\n')
-  );
-
-  const handleSubmit = () => {
-    const content: LessonContentBlock[] = germanContent
-      .split('\n')
-      .map((germanLine, index) => ({
+  switch (blockType) {
+    case 'text':
+      return {
         type: 'text',
-        german: germanLine
-          .split(' ')
-          .map((word) => ({ german: word, serbian: '...' })),
-        serbian: serbianContent.split('\n')[index] || '',
-      }));
-    onSave(block.id, { title, content });
-    onOpenChange(false);
-  };
+        title,
+        slug,
+        order,
+        lessonId,
+        lessonTitle,
+        content: [],
+      } satisfies NewTextual;
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit {block.type} Block</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div>
-            <Label htmlFor="block-title-edit">Block Title</Label>
-            <Input
-              id="block-title-edit"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="german-content-edit">
-              German Content
-            </Label>
-            <Textarea
-              id="german-content-edit"
-              value={germanContent}
-              onChange={(e) => setGermanContent(e.target.value)}
-              rows={8}
-            />
-          </div>
-          <div>
-            <Label htmlFor="serbian-content-edit">
-              Serbian Content
-            </Label>
-            <Textarea
-              id="serbian-content-edit"
-              value={serbianContent}
-              onChange={(e) => setSerbianContent(e.target.value)}
-              rows={8}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button onClick={handleSubmit}>Save Changes</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
+    case 'grammar':
+      return {
+        type: 'grammar',
+        title,
+        slug,
+        order,
+        lessonId,
+        lessonTitle,
+        content: [],
+      } satisfies NewGrammar;
 
-const EditVideoBlockDialog = ({
-  block,
-  onSave,
-  isOpen,
-  onOpenChange,
-}: {
-  block: VideoLessonBlock;
-  onSave: (id: string, data: Partial<LessonBlock>) => void;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) => {
-  const [title, setTitle] = useState(block.title);
-  const [videoUrl, setVideoUrl] = useState(block.videoUrl);
+    case 'quiz':
+      return {
+        type: 'quiz',
+        title,
+        slug,
+        order,
+        lessonId,
+        lessonTitle,
+        quizzes: [],
+      } satisfies NewQuiz;
 
-  const handleSubmit = () => {
-    onSave(block.id, { title, videoUrl });
-    onOpenChange(false);
-  };
+    case 'video':
+      return {
+        type: 'video',
+        title,
+        slug,
+        order,
+        lessonId,
+        lessonTitle,
+        videoUrl: '',
+        description: '',
+      } satisfies NewVideo;
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Video Block</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div>
-            <Label htmlFor="block-title-video">Block Title</Label>
-            <Input
-              id="block-title-video"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="block-video-url">Video URL</Label>
-            <Input
-              id="block-video-url"
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button onClick={handleSubmit}>Save Changes</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
+    case 'vocabulary':
+      return {
+        type: 'vocabulary',
+        title,
+        slug,
+        order,
+        lessonId,
+        lessonTitle,
+        words: [],
+      } satisfies NewVocabulary;
+  }
+}
 
-const DeleteConfirmationDialog = ({
-  block,
-  onConfirm,
-  isOpen,
-  onOpenChange,
-}: {
-  block: LessonBlock;
-  onConfirm: (id: string) => void;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) => (
-  <Dialog open={isOpen} onOpenChange={onOpenChange}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Are you sure?</DialogTitle>
-        <DialogDescription>
-          This will permanently delete the block {block.title}. This
-          action cannot be undone.
-        </DialogDescription>
-      </DialogHeader>
-      <DialogFooter>
-        <DialogClose asChild>
-          <Button variant="outline">Cancel</Button>
-        </DialogClose>
-        <Button
-          variant="destructive"
-          onClick={() => onConfirm(block.id)}
-        >
-          Delete
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
-);
-
-// --- MAIN ADMIN PAGE COMPONENT ---
 const AdminPage = () => {
   const [allLessons, setAllLessons] = useState<LessonWithId[]>([]);
   const [selectedLesson, setSelectedLesson] =
@@ -346,7 +178,7 @@ const AdminPage = () => {
     const unsubscribe = onSnapshot(lessonsQuery, (snapshot) => {
       setAllLessons(
         snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as LessonWithId)
+          (d) => ({ id: d.id, ...d.data() } as LessonWithId)
         )
       );
     });
@@ -354,41 +186,37 @@ const AdminPage = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedLesson) {
-      const blocksQuery = query(
-        collection(db, 'lessons', selectedLesson.id, 'blocks'),
-        orderBy('order', 'asc')
-      );
-      const unsubscribe = onSnapshot(blocksQuery, (snapshot) => {
-        setLessonBlocks(
-          snapshot.docs.map(
-            (doc) => ({ id: doc.id, ...doc.data() } as LessonBlock)
-          )
-        );
-      });
-      return () => unsubscribe();
-    } else {
+    if (!selectedLesson) {
       setLessonBlocks([]);
+      return;
     }
+    const blocksQuery = query(
+      collection(db, 'lessons', selectedLesson.id, 'blocks'),
+      orderBy('order', 'asc')
+    );
+    const unsubscribe = onSnapshot(blocksQuery, (snapshot) => {
+      setLessonBlocks(
+        snapshot.docs.map(
+          (d) => ({ id: d.id, ...d.data() } as LessonBlock)
+        )
+      );
+    });
+    return () => unsubscribe();
   }, [selectedLesson]);
-
-  const createSlug = (title: string) =>
-    title
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^\w-]+/g, '');
 
   const handleAddLesson = async (
     title: string,
-    selectedBlockTypes: string[]
+    selectedBlockTypes: LessonBlock['type'][]
   ) => {
     if (!title.trim()) return;
+
     const newLessonData: Lesson = {
       title,
       slug: createSlug(title),
       order: allLessons.length,
       createdAt: Timestamp.now(),
     };
+
     const lessonRef = await addDoc(
       collection(db, 'lessons'),
       newLessonData
@@ -398,23 +226,22 @@ const AdminPage = () => {
     selectedBlockTypes.forEach((blockType, index) => {
       const blockInfo = BLOCK_TYPES.find((b) => b.id === blockType)!;
       const blockTitle = blockInfo.label;
-      const newBlock = {
-        title: blockTitle,
-        slug: createSlug(`${title}-${blockTitle}`),
-        type: blockType,
-        order: index,
+
+      const payload = buildNewBlock({
+        blockType,
         lessonId: lessonRef.id,
         lessonTitle: title,
-        content: [],
-        quizzes: [],
-        videoUrl: '',
-        words: [],
-      };
+        order: index,
+        title: blockTitle,
+        slug: createSlug(`${title}-${blockTitle}`),
+      });
+
       const blockRef = doc(
         collection(db, 'lessons', lessonRef.id, 'blocks')
       );
-      batch.set(blockRef, newBlock);
+      batch.set(blockRef, payload);
     });
+
     await batch.commit();
   };
 
@@ -442,29 +269,129 @@ const AdminPage = () => {
     setBlockToDelete(null);
   };
 
+  const handleLessonDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = allLessons.findIndex(
+        (l) => l.id === active.id
+      );
+      const newIndex = allLessons.findIndex((l) => l.id === over.id);
+      const newOrder = arrayMove(allLessons, oldIndex, newIndex);
+      setAllLessons(newOrder);
+
+      const batch = writeBatch(db);
+      newOrder.forEach((lesson, index) => {
+        batch.update(doc(db, 'lessons', lesson.id), { order: index });
+      });
+      await batch.commit();
+    }
+  };
+
+  const handleBlockDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (selectedLesson && over && active.id !== over.id) {
+      const oldIndex = lessonBlocks.findIndex(
+        (b) => b.id === active.id
+      );
+      const newIndex = lessonBlocks.findIndex(
+        (b) => b.id === over.id
+      );
+      const newOrder = arrayMove(lessonBlocks, oldIndex, newIndex);
+      setLessonBlocks(newOrder);
+
+      const batch = writeBatch(db);
+      newOrder.forEach((block, index) => {
+        batch.update(
+          doc(db, 'lessons', selectedLesson.id, 'blocks', block.id),
+          {
+            order: index,
+          }
+        );
+      });
+      await batch.commit();
+    }
+  };
+
+  const renderEditDialog = () => {
+    if (!blockToEdit) return null;
+    switch (blockToEdit.type) {
+      case 'text':
+      case 'grammar':
+        return (
+          <EditTextBlockDialog
+            isOpen={!!blockToEdit}
+            onOpenChange={() => setBlockToEdit(null)}
+            block={
+              blockToEdit as TextualLessonBlock | GrammarLessonBlock
+            }
+            onSave={handleUpdateBlock}
+          />
+        );
+      case 'video':
+        return (
+          <EditVideoBlockDialog
+            isOpen={!!blockToEdit}
+            onOpenChange={() => setBlockToEdit(null)}
+            block={blockToEdit as VideoLessonBlock}
+            onSave={handleUpdateBlock}
+          />
+        );
+      case 'vocabulary':
+        return (
+          <EditVocabularyBlockDialog
+            isOpen={!!blockToEdit}
+            onOpenChange={() => setBlockToEdit(null)}
+            block={blockToEdit as VocabularyLessonBlock}
+            onSave={handleUpdateBlock}
+          />
+        );
+      case 'quiz':
+        return (
+          <EditQuizBlockDialog
+            isOpen={!!blockToEdit}
+            onOpenChange={() => setBlockToEdit(null)}
+            block={blockToEdit as QuizLessonBlock}
+            onSave={handleUpdateBlock}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-100">
-      <aside className="w-full md:w-1/3 lg:w-1/4 bg-white border-r p-4 overflow-y-auto">
+      <aside className="w-full md:w-1/3 lg:w-1/4 bg-white border-r p-4 flex flex-col">
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-4">
           <LayoutDashboard /> Admin Panel
         </h1>
+
         <AddLessonDialog onSave={handleAddLesson} />
-        <nav className="space-y-1">
-          {allLessons.map((lesson) => (
-            <button
-              key={lesson.id}
-              onClick={() => setSelectedLesson(lesson)}
-              className={`w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                selectedLesson?.id === lesson.id
-                  ? 'bg-gray-200 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+
+        <div className="flex-grow overflow-y-auto">
+          <DndContext
+            collisionDetection={closestCenter}
+            onDragEnd={handleLessonDragEnd}
+          >
+            <SortableContext
+              items={allLessons.map((l) => l.id)}
+              strategy={verticalListSortingStrategy}
             >
-              {lesson.order + 1}. {lesson.title}
-            </button>
-          ))}
-        </nav>
+              {allLessons.map((lesson) => (
+                <SortableLessonItem
+                  key={lesson.id}
+                  id={lesson.id}
+                  title={lesson.title}
+                  onClick={() => setSelectedLesson(lesson)}
+                  isSelected={selectedLesson?.id === lesson.id}
+                  order={lesson.order}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        </div>
       </aside>
+
       <main className="w-full md:w-2/3 lg:w-3/4 p-8 overflow-y-auto">
         {selectedLesson ? (
           <div>
@@ -476,41 +403,27 @@ const AdminPage = () => {
                 <CardTitle>Lesson Blocks</CardTitle>
               </CardHeader>
               <CardContent>
-                {lessonBlocks.length > 0 ? (
-                  lessonBlocks.map((block) => (
-                    <div
-                      key={block.id}
-                      className="p-3 border-b flex justify-between items-center"
-                    >
-                      <span className="flex items-center gap-2">
-                        {
-                          BLOCK_TYPES.find((b) => b.id === block.type)
-                            ?.icon
-                        }
-                        {block.order + 1}. {block.title}
-                      </span>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setBlockToEdit(block)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setBlockToDelete(block)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 py-4">
-                    No blocks defined for this lesson. You can define
-                    them when creating a new lesson.
+                <DndContext
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleBlockDragEnd}
+                >
+                  <SortableContext
+                    items={lessonBlocks.map((b) => b.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {lessonBlocks.map((block) => (
+                      <SortableBlockItem
+                        key={block.id}
+                        block={block}
+                        onEdit={() => setBlockToEdit(block)}
+                        onRemove={() => setBlockToDelete(block)}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+                {lessonBlocks.length === 0 && (
+                  <p className="text-gray-500 py-4 text-center">
+                    No blocks defined for this lesson.
                   </p>
                 )}
               </CardContent>
@@ -522,24 +435,7 @@ const AdminPage = () => {
           </div>
         )}
 
-        {blockToEdit &&
-          (blockToEdit.type === 'text' ||
-            blockToEdit.type === 'grammar') && (
-            <EditTextBlockDialog
-              isOpen={!!blockToEdit}
-              onOpenChange={() => setBlockToEdit(null)}
-              block={blockToEdit as TextualLessonBlock}
-              onSave={handleUpdateBlock}
-            />
-          )}
-        {blockToEdit && blockToEdit.type === 'video' && (
-          <EditVideoBlockDialog
-            isOpen={!!blockToEdit}
-            onOpenChange={() => setBlockToEdit(null)}
-            block={blockToEdit as VideoLessonBlock}
-            onSave={handleUpdateBlock}
-          />
-        )}
+        {renderEditDialog()}
 
         {blockToDelete && (
           <DeleteConfirmationDialog
