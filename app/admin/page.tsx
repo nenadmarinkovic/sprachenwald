@@ -27,7 +27,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import {
   Lesson,
   LessonWithId,
@@ -58,6 +57,7 @@ import { EditQuizBlockDialog } from '@/components/admin/EditQuizBlockDialog';
 import { EditVocabularyBlockDialog } from '@/components/admin/EditVocabularyBlockDialog';
 import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
 import { SortableAccordionBlockItem } from '@/components/admin/SortableBlockItem';
+import { AddBlockDialog } from '@/components/admin/AddBlockDialog';
 
 const BLOCK_TYPES: Array<{
   id: LessonBlock['type'];
@@ -229,29 +229,31 @@ const AdminPage = () => {
     await batch.commit();
   };
 
-  const handleAddBlock = async (blockType: LessonBlock['type']) => {
+  const handleAddBlocksToLesson = async (
+    selectedBlockTypes: LessonBlock['type'][]
+  ) => {
     if (!selectedLesson) return;
 
-    const blockInfo = BLOCK_TYPES.find((b) => b.id === blockType)!;
-    const blockTitle = prompt(
-      `Enter title for new ${blockInfo.label}:`,
-      blockInfo.label
-    );
-    if (!blockTitle) return;
-
-    const payload = buildNewBlock({
-      blockType,
-      lessonId: selectedLesson.id,
-      lessonTitle: selectedLesson.title,
-      order: lessonBlocks.length,
-      title: blockTitle,
-      slug: createSlug(`${selectedLesson.title}-${blockTitle}`),
+    const batch = writeBatch(db);
+    selectedBlockTypes.forEach((blockType, index) => {
+      const blockInfo = BLOCK_TYPES.find((b) => b.id === blockType)!;
+      const blockTitle = blockInfo.label;
+      const payload = buildNewBlock({
+        blockType,
+        lessonId: selectedLesson.id,
+        lessonTitle: selectedLesson.title,
+        order: lessonBlocks.length + index,
+        title: blockTitle,
+        slug: createSlug(
+          `${selectedLesson.title}-${blockTitle}-${Date.now()}`
+        ),
+      });
+      const blockRef = doc(
+        collection(db, 'lessons', selectedLesson.id, 'blocks')
+      );
+      batch.set(blockRef, payload);
     });
-
-    await addDoc(
-      collection(db, 'lessons', selectedLesson.id, 'blocks'),
-      payload
-    );
+    await batch.commit();
   };
 
   const handleUpdateLesson = async (
@@ -411,9 +413,12 @@ const AdminPage = () => {
       <main className="w-full md:w-2/3 lg:w-3/4 p-8 overflow-y-auto">
         {selectedLesson ? (
           <div>
-            <h2 className="text-3xl font-bold mb-4">
-              {selectedLesson.title}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-3xl font-bold">
+                {selectedLesson.title}
+              </h2>
+              <AddBlockDialog onSave={handleAddBlocksToLesson} />
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle>Lesson Blocks</CardTitle>
@@ -443,26 +448,6 @@ const AdminPage = () => {
                     No blocks defined for this lesson.
                   </p>
                 )}
-
-                <div className="mt-4 pt-4 border-t">
-                  <h4 className="text-sm font-semibold mb-2">
-                    Add New Block to {selectedLesson.title}
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {BLOCK_TYPES.map((blockType) => (
-                      <Button
-                        key={blockType.id}
-                        variant="outline"
-                        onClick={() => handleAddBlock(blockType.id)}
-                      >
-                        {blockType.icon}
-                        <span className="ml-2">
-                          {blockType.label}
-                        </span>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>
