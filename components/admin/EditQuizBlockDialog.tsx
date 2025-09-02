@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LessonBlock, QuizLessonBlock } from '@/types/sprachenwald';
-import { AddQuizDialog } from '@/components/AddQuizDialog';
+import { AddQuizDialog } from '../AddQuizDialog';
 
 export const EditQuizBlockDialog = ({
   block,
@@ -47,8 +47,10 @@ export const EditQuizBlockDialog = ({
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
+
           <div className="p-4 border rounded-md">
             <h4 className="font-medium mb-2">Manage Questions</h4>
+
             {block.quizzes?.map((quiz, index) => (
               <div key={index} className="text-sm p-2 border-b">
                 {index + 1}. {quiz.question}
@@ -59,12 +61,15 @@ export const EditQuizBlockDialog = ({
                 No quizzes yet.
               </p>
             )}
+
             <AddQuizDialog
               lessonId={block.lessonId}
+              blockId={block.id}
               currentQuizzes={block.quizzes || []}
             />
           </div>
         </div>
+
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>

@@ -21,16 +21,18 @@ import {
 } from '@/components/ui/select';
 import { PlusCircle } from 'lucide-react';
 import { Quiz } from '@/types/sprachenwald';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 interface AddQuizDialogProps {
-  lessonId: string | null;
-  currentQuizzes: Quiz[];
+  lessonId: string; // ✅ required
+  blockId: string; // ✅ new: which block to update
+  currentQuizzes: Quiz[]; // current quizzes (for immediate UI)
 }
 
 export const AddQuizDialog = ({
   lessonId,
+  blockId,
   currentQuizzes,
 }: AddQuizDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -41,21 +43,25 @@ export const AddQuizDialog = ({
   const [mcOptions, setMcOptions] = useState(['', '', '', '']);
   const [correctMcAnswer, setCorrectMcAnswer] = useState('');
   const [fibCorrectAnswer, setFibCorrectAnswer] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleOptionChange = (index: number, value: string) => {
-    const newOptions = [...mcOptions];
-    newOptions[index] = value;
-    setMcOptions(newOptions);
+    setMcOptions((opts) => {
+      const copy = [...opts];
+      copy[index] = value;
+      return copy;
+    });
   };
 
   const handleAddQuiz = async () => {
-    if (!currentQuestion.trim() || !lessonId) return;
+    if (!currentQuestion.trim()) return;
 
     let newQuiz: Quiz | null = null;
+
     if (quizType === 'multiple-choice') {
-      const filteredOptions = mcOptions.filter(
-        (opt) => opt.trim() !== ''
-      );
+      const filteredOptions = mcOptions
+        .map((o) => o.trim())
+        .filter(Boolean);
       if (
         filteredOptions.length < 2 ||
         !correctMcAnswer.trim() ||
@@ -68,9 +74,9 @@ export const AddQuizDialog = ({
       }
       newQuiz = {
         type: 'multiple-choice',
-        question: currentQuestion,
+        question: currentQuestion.trim(),
         options: filteredOptions,
-        correctAnswer: correctMcAnswer,
+        correctAnswer: correctMcAnswer.trim(),
       };
     } else {
       if (!fibCorrectAnswer.trim()) {
@@ -79,35 +85,74 @@ export const AddQuizDialog = ({
       }
       newQuiz = {
         type: 'fill-in-the-blank',
-        question: currentQuestion,
-        correctAnswer: fibCorrectAnswer,
+        question: currentQuestion.trim(),
+        correctAnswer: fibCorrectAnswer.trim(),
       };
     }
 
-    if (newQuiz) {
-      const updatedQuizzes = [...currentQuizzes, newQuiz];
-      const lessonRef = doc(db, 'lessons', lessonId);
-      await updateDoc(lessonRef, { quizzes: updatedQuizzes });
+    if (!newQuiz) return;
 
+    try {
+      setSaving(true);
+
+      // ✅ Update the BLOCK doc, not the LESSON doc
+      const blockRef = doc(
+        db,
+        'lessons',
+        lessonId,
+        'blocks',
+        blockId
+      );
+
+      // Optional: fetch latest quizzes to avoid clobbering concurrent edits
+      const snap = await getDoc(blockRef);
+      const existing =
+        (snap.exists() && (snap.data().quizzes as Quiz[])) ||
+        currentQuizzes ||
+        [];
+
+      const updatedQuizzes = [...existing, newQuiz];
+      await updateDoc(blockRef, { quizzes: updatedQuizzes });
+
+      // reset form
       setCurrentQuestion('');
       setMcOptions(['', '', '', '']);
       setCorrectMcAnswer('');
       setFibCorrectAnswer('');
+
       setIsOpen(false);
+    } finally {
+      setSaving(false);
     }
   };
 
+  const closeAndReset = () => {
+    setIsOpen(false);
+    setCurrentQuestion('');
+    setMcOptions(['', '', '', '']);
+    setCorrectMcAnswer('');
+    setFibCorrectAnswer('');
+    setQuizType('multiple-choice');
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) =>
+        open ? setIsOpen(true) : closeAndReset()
+      }
+    >
       <DialogTrigger asChild>
         <Button className="w-full mt-4">
           <PlusCircle size={16} className="mr-2" /> Dodaj novi kviz
         </Button>
       </DialogTrigger>
+
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Dodaj novi kviz</DialogTitle>
         </DialogHeader>
+
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="quizType">Tip kviza</Label>
@@ -115,7 +160,7 @@ export const AddQuizDialog = ({
               onValueChange={(
                 value: 'multiple-choice' | 'fill-in-the-blank'
               ) => setQuizType(value)}
-              defaultValue={quizType}
+              value={quizType}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Izaberite tip" />
@@ -161,6 +206,7 @@ export const AddQuizDialog = ({
                   />
                 </div>
               ))}
+
               <div className="space-y-2">
                 <Label htmlFor="correctMcAnswer">Tačan odgovor</Label>
                 <Select
@@ -172,7 +218,8 @@ export const AddQuizDialog = ({
                   </SelectTrigger>
                   <SelectContent>
                     {mcOptions
-                      .filter((opt) => opt)
+                      .map((o) => o.trim())
+                      .filter(Boolean)
                       .map((opt, i) => (
                         <SelectItem key={i} value={opt}>
                           {opt}
@@ -195,14 +242,23 @@ export const AddQuizDialog = ({
             </div>
           )}
         </div>
+
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="secondary">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={saving}
+            >
               Cancel
             </Button>
           </DialogClose>
-          <Button onClick={handleAddQuiz} type="button">
-            Dodaj kviz
+          <Button
+            onClick={handleAddQuiz}
+            type="button"
+            disabled={saving}
+          >
+            {saving ? 'Snima…' : 'Dodaj kviz'}
           </Button>
         </DialogFooter>
       </DialogContent>
