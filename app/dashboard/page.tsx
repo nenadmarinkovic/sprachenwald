@@ -23,7 +23,6 @@ const DashboardPage = () => {
   const [isLoading, setIsLoading] = React.useState(true);
   const router = useRouter();
 
-  // Mock user for demonstration
   React.useEffect(() => {
     setUser({
       uid: '123',
@@ -77,7 +76,7 @@ const DashboardPage = () => {
       <main className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="hover:shadow-lg transition-shadow">
-            <Link href="/lessons/sprachenweg">
+            <Link href="/block/sprachenweg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BookOpen className="text-green-600" />

@@ -14,40 +14,10 @@ export interface LessonContentBlock {
   serbian: string;
 }
 
-export interface Footnote {
-  id: number;
-  text: string;
-}
-
 export interface HedgehogMessage {
   type: 'hedgehog';
   text: string;
 }
-
-export interface Lesson {
-  title: string;
-  slug: string;
-  content: (LessonContentBlock | HedgehogMessage)[];
-  footnotes: Footnote[];
-  vocabulary: Omit<InteractiveWord, 'info'>[];
-  quizzes: Quiz[];
-  createdAt: Timestamp;
-  order: number;
-}
-
-export interface LessonWithId extends Lesson {
-  id: string;
-}
-
-export interface VocabularyWord extends InteractiveWord {
-  id: string;
-  userId: string;
-  lessonId: string;
-  addedAt: Timestamp;
-  type: 'imenica' | 'glagol' | 'pridev' | 'ostalo';
-}
-
-// --- QUIZ TYPES ---
 
 export interface MultipleChoiceQuiz {
   type: 'multiple-choice';
@@ -92,3 +62,69 @@ export type Quiz =
   | MatchQuiz
   | AudioQuiz
   | SentenceOrderQuiz;
+
+export interface BaseLessonBlock {
+  id: string;
+  title: string;
+  slug: string;
+  order: number;
+  lessonId: string;
+  lessonTitle: string;
+}
+
+export interface TextualLessonBlock extends BaseLessonBlock {
+  type: 'text';
+  content: (LessonContentBlock | HedgehogMessage)[];
+}
+
+export interface QuizLessonBlock extends BaseLessonBlock {
+  type: 'quiz';
+  quizzes: Quiz[];
+}
+
+export interface VideoLessonBlock extends BaseLessonBlock {
+  type: 'video';
+  videoUrl: string;
+  description?: string;
+}
+
+export interface GrammarLessonBlock extends BaseLessonBlock {
+  type: 'grammar';
+  content: (LessonContentBlock | HedgehogMessage)[];
+}
+
+export interface VocabularyLessonBlock extends BaseLessonBlock {
+  type: 'vocabulary';
+  words: InteractiveWord[];
+}
+
+export type LessonBlock =
+  | TextualLessonBlock
+  | QuizLessonBlock
+  | VideoLessonBlock
+  | GrammarLessonBlock
+  | VocabularyLessonBlock;
+
+export interface Lesson {
+  title: string;
+  slug: string;
+  order: number;
+  createdAt: Timestamp;
+}
+
+export interface LessonWithId extends Lesson {
+  id: string;
+}
+
+export interface Footnote {
+  id: number;
+  text: string;
+}
+
+export interface VocabularyWord extends InteractiveWord {
+  id: string;
+  userId: string;
+  lessonId: string;
+  addedAt: Timestamp;
+  type: 'imenica' | 'glagol' | 'pridev' | 'ostalo';
+}
