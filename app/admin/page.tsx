@@ -42,6 +42,7 @@ import {
   Lesson,
   LessonWithId,
   InteractiveWord,
+  LessonContentBlock,
 } from '@/types/sprachenwald';
 import { AddQuizDialog } from '@/components/AddQuizDialog';
 
@@ -51,7 +52,8 @@ const AdminPage = () => {
     string | null
   >(null);
   const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
+  const [germanContent, setGermanContent] = useState('');
+  const [serbianContent, setSerbianContent] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,24 +80,29 @@ const AdminPage = () => {
   useEffect(() => {
     if (selectedLesson) {
       setTitle(selectedLesson.title);
-      setContent(JSON.stringify(selectedLesson.content, null, 2));
+      if (Array.isArray(selectedLesson.content)) {
+        const germanText = selectedLesson.content
+          .map((block) =>
+            block.type === 'text' && Array.isArray(block.german)
+              ? block.german.map((word) => word.german).join(' ')
+              : ''
+          )
+          .join('\n');
+        const serbianText = selectedLesson.content
+          .map((block) =>
+            block.type === 'text' ? block.serbian : ''
+          )
+          .join('\n');
+        setGermanContent(germanText);
+        setSerbianContent(serbianText);
+      } else {
+        setGermanContent('');
+        setSerbianContent('');
+      }
     } else {
       setTitle('');
-      setContent(
-        JSON.stringify(
-          [
-            {
-              type: 'text',
-              german: [
-                { german: 'Beispiel', serbian: 'Primer', info: 'n.' },
-              ],
-              serbian: 'Primer recenice.',
-            },
-          ],
-          null,
-          2
-        )
-      );
+      setGermanContent('');
+      setSerbianContent('');
     }
   }, [selectedLesson]);
 
@@ -141,21 +148,32 @@ const AdminPage = () => {
 
   const handleSaveLesson = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !content) {
-      setError('Naslov i sadržaj su obavezni.');
+    if (!title || !germanContent || !serbianContent) {
+      setError('Sva polja su obavezna.');
       return;
     }
     setIsLoading(true);
     setError(null);
 
-    let parsedContent;
-    try {
-      parsedContent = JSON.parse(content);
-    } catch (e) {
-      setError('Sadržaj nije validan JSON format.');
-      setIsLoading(false);
-      return;
-    }
+    const germanLines = germanContent.split('\n');
+    const serbianLines = serbianContent.split('\n');
+
+    const content: LessonContentBlock[] = germanLines.map(
+      (germanLine, index) => {
+        const serbianLine = serbianLines[index] || '';
+        const germanWords: InteractiveWord[] = germanLine
+          .split(' ')
+          .map((word) => ({
+            german: word,
+            serbian: 'translation_placeholder', // placeholder for now
+          }));
+        return {
+          type: 'text',
+          german: germanWords,
+          serbian: serbianLine,
+        };
+      }
+    );
 
     const slug = createSlug(title);
     const isEditing = !!selectedLessonId;
@@ -163,29 +181,19 @@ const AdminPage = () => {
       (l) => l.id === selectedLessonId
     );
 
-    const vocabulary: Omit<InteractiveWord, 'info'>[] = [];
-    if (Array.isArray(parsedContent)) {
-      parsedContent.forEach((block) => {
-        if (block.type === 'text' && Array.isArray(block.german)) {
-          block.german.forEach((word: InteractiveWord) => {
-            vocabulary.push({
-              german: word.german,
-              serbian: word.serbian,
-            });
-          });
-        }
-      });
-    }
-
-    const uniqueVocabulary = Array.from(
-      new Map(vocabulary.map((item) => [item.german, item])).values()
-    );
+    const vocabulary: Omit<InteractiveWord, 'info'>[] =
+      content.flatMap((block) =>
+        block.german.map((word) => ({
+          german: word.german,
+          serbian: word.serbian,
+        }))
+      );
 
     const lessonData: Partial<Lesson> = {
       title,
-      content: parsedContent,
+      content,
       slug,
-      vocabulary: uniqueVocabulary,
+      vocabulary: vocabulary,
       quizzes: isEditing ? currentLesson?.quizzes ?? [] : [],
       order: isEditing
         ? currentLesson?.order ?? allLessons.length
@@ -194,8 +202,10 @@ const AdminPage = () => {
 
     try {
       if (isEditing) {
-        const lessonRef = doc(db, 'lessons', selectedLessonId);
-        await updateDoc(lessonRef, lessonData);
+        if (selectedLessonId) {
+          const lessonRef = doc(db, 'lessons', selectedLessonId);
+          await updateDoc(lessonRef, lessonData);
+        }
       } else {
         await addDoc(collection(db, 'lessons'), {
           ...lessonData,
@@ -240,10 +250,6 @@ const AdminPage = () => {
                   ? 'Izmeni lekciju'
                   : 'Dodaj novu lekciju'}
               </DialogTitle>
-              <DialogDescription>
-                Unesite detalje za lekciju ovde. Sadržaj mora biti u
-                JSON formatu.
-              </DialogDescription>
             </DialogHeader>
             <form
               className="space-y-4 py-4"
@@ -259,16 +265,23 @@ const AdminPage = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="content">
-                  Sadržaj lekcije (JSON)
-                </Label>
+                <Label htmlFor="germanContent">Nemački tekst</Label>
                 <Textarea
-                  id="content"
-                  rows={15}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  id="germanContent"
+                  rows={10}
+                  value={germanContent}
+                  onChange={(e) => setGermanContent(e.target.value)}
                   required
-                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="serbianContent">Srpski prevod</Label>
+                <Textarea
+                  id="serbianContent"
+                  rows={10}
+                  value={serbianContent}
+                  onChange={(e) => setSerbianContent(e.target.value)}
+                  required
                 />
               </div>
               {error && (

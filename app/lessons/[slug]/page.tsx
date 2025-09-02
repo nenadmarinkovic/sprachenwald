@@ -162,7 +162,10 @@ export default function LessonPageLayout() {
         {block.german.map((word, index) => (
           <Popover key={index}>
             <PopoverTrigger asChild>
-              <span className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1">
+              <span
+                className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1"
+                onDoubleClick={() => console.log(word)} // Placeholder for popover logic
+              >
                 {word.german}{' '}
               </span>
             </PopoverTrigger>
@@ -175,6 +178,16 @@ export default function LessonPageLayout() {
                 {word.info && (
                   <p className="text-sm text-muted-foreground mt-2">
                     {word.info}
+                  </p>
+                )}
+                {word.article && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Article: {word.article}
+                  </p>
+                )}
+                {word.example && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Example: {word.example}
                   </p>
                 )}
               </div>
@@ -358,7 +371,7 @@ export default function LessonPageLayout() {
           <BookOpen size={20} /> Lekcije
         </h2>
         <nav className="space-y-1">
-          {allLessons.map((lesson) => (
+          {allLessons.map((lesson, index) => (
             <Link
               key={lesson.id}
               href={`/lessons/${lesson.slug}`}
@@ -372,7 +385,7 @@ export default function LessonPageLayout() {
                     : 'text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {lesson.title}
+                {index + 1}. {lesson.title}
               </div>
             </Link>
           ))}

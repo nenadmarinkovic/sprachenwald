@@ -1,8 +1,11 @@
 import { Timestamp } from 'firebase/firestore';
+
 export interface InteractiveWord {
   german: string;
   serbian: string;
   info?: string;
+  article?: string;
+  example?: string;
 }
 
 export interface LessonContentBlock {
