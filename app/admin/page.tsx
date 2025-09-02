@@ -417,7 +417,10 @@ const AdminPage = () => {
               <h2 className="text-3xl font-bold">
                 {selectedLesson.title}
               </h2>
-              <AddBlockDialog onSave={handleAddBlocksToLesson} />
+              <AddBlockDialog
+                onSave={handleAddBlocksToLesson}
+                existingBlockTypes={lessonBlocks.map((b) => b.type)}
+              />
             </div>
             <Card>
               <CardHeader>

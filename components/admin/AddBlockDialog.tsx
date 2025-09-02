@@ -36,8 +36,10 @@ const BLOCK_TYPES = [
 
 export const AddBlockDialog = ({
   onSave,
+  existingBlockTypes = [],
 }: {
   onSave: (selectedBlockTypes: LessonBlock['type'][]) => void;
+  existingBlockTypes?: LessonBlock['type'][]; // 👈 pass in from AdminPage
 }) => {
   const [selectedBlocks, setSelectedBlocks] = useState(
     new Set<LessonBlock['type']>()
@@ -45,6 +47,7 @@ export const AddBlockDialog = ({
   const [isOpen, setIsOpen] = useState(false);
 
   const handleBlockTypeToggle = (blockType: LessonBlock['type']) => {
+    if (existingBlockTypes.includes(blockType)) return; // safety
     const next = new Set(selectedBlocks);
     if (next.has(blockType)) next.delete(blockType);
     else next.add(blockType);
@@ -52,7 +55,11 @@ export const AddBlockDialog = ({
   };
 
   const handleSubmit = () => {
-    onSave(Array.from(selectedBlocks));
+    // filter just in case
+    const allowed = Array.from(selectedBlocks).filter(
+      (t) => !existingBlockTypes.includes(t)
+    );
+    if (allowed.length > 0) onSave(allowed);
     setSelectedBlocks(new Set());
     setIsOpen(false);
   };
@@ -60,12 +67,7 @@ export const AddBlockDialog = ({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="default"
-          size="icon"
-          className="flex w-32 cursor-pointer"
-        >
-          <span>Add block</span>
+        <Button variant="outline" size="icon">
           <PlusCircle className="h-4 w-4" />
         </Button>
       </DialogTrigger>
@@ -77,26 +79,41 @@ export const AddBlockDialog = ({
           <div>
             <Label>Select Block Types to Add</Label>
             <div className="grid grid-cols-2 gap-4 mt-2">
-              {BLOCK_TYPES.map((blockType) => (
-                <div
-                  key={blockType.id}
-                  className="flex items-center space-x-2 p-3 border rounded-md"
-                >
-                  <Checkbox
-                    id={`add-${blockType.id}`}
-                    checked={selectedBlocks.has(blockType.id)}
-                    onCheckedChange={() =>
-                      handleBlockTypeToggle(blockType.id)
-                    }
-                  />
-                  <Label
-                    htmlFor={`add-${blockType.id}`}
-                    className="flex items-center gap-2 cursor-pointer"
+              {BLOCK_TYPES.map((blockType) => {
+                const alreadyExists = existingBlockTypes.includes(
+                  blockType.id
+                );
+                return (
+                  <div
+                    key={blockType.id}
+                    className={`flex items-center space-x-2 p-3 border rounded-md ${
+                      alreadyExists
+                        ? 'opacity-50 cursor-not-allowed'
+                        : ''
+                    }`}
                   >
-                    {blockType.icon} {blockType.label}
-                  </Label>
-                </div>
-              ))}
+                    <Checkbox
+                      id={`add-${blockType.id}`}
+                      checked={selectedBlocks.has(blockType.id)}
+                      disabled={alreadyExists}
+                      onCheckedChange={() =>
+                        handleBlockTypeToggle(blockType.id)
+                      }
+                    />
+                    <Label
+                      htmlFor={`add-${blockType.id}`}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      {blockType.icon} {blockType.label}
+                      {alreadyExists && (
+                        <span className="text-xs text-gray-500">
+                          (already added)
+                        </span>
+                      )}
+                    </Label>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
