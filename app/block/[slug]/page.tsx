@@ -1,24 +1,16 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 import { db } from '@/lib/firebase';
 import {
+  addDoc,
   collection,
-  query,
   getDocs,
   orderBy,
-  addDoc,
+  query,
   Timestamp,
 } from 'firebase/firestore';
-import {
-  BookOpen,
-  CheckCircle,
-  Film,
-  Puzzle,
-  BookCopy,
-  Mic,
-} from 'lucide-react';
 import {
   LessonWithId,
   LessonBlock,
@@ -40,34 +32,18 @@ import {
   RadioGroupItem,
 } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
-
-const blockIcons: { [key: string]: React.ReactNode } = {
-  text: <BookCopy className="h-4 w-4" />,
-  grammar: <Puzzle className="h-4 w-4" />,
-  video: <Film className="h-4 w-4" />,
-  quiz: <CheckCircle className="h-4 w-4" />,
-  vocabulary: <Mic className="h-4 w-4" />,
-};
-
-type SidebarData = LessonWithId & { blocks: LessonBlock[] };
 
 const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [submitted, setSubmitted] = useState<boolean>(false);
+  const [submitted, setSubmitted] = useState(false);
 
-  const handleAnswerChange = (
-    questionIndex: number,
-    answer: string
-  ) => {
-    setAnswers((prev) => ({ ...prev, [questionIndex]: answer }));
-  };
+  const handleAnswerChange = (idx: number, answer: string) =>
+    setAnswers((prev) => ({ ...prev, [idx]: answer }));
 
-  const handleSubmit = () => setSubmitted(true);
-
-  const isCorrect = (quiz: MultipleChoiceQuiz, answer: string) => {
-    return quiz.correctAnswer === answer;
-  };
+  const isCorrect = (quiz: MultipleChoiceQuiz, answer: string) =>
+    quiz.correctAnswer === answer;
 
   return (
     <div className="space-y-8">
@@ -79,13 +55,11 @@ const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
                 {index + 1}. {quiz.question}
               </p>
               <RadioGroup
-                onValueChange={(value) =>
-                  handleAnswerChange(index, value)
-                }
+                onValueChange={(v) => handleAnswerChange(index, v)}
                 disabled={submitted}
               >
                 {quiz.options.map((option, i) => {
-                  const answerState = submitted
+                  const state = submitted
                     ? isCorrect(quiz, option)
                       ? 'correct'
                       : answers[index] === option
@@ -96,11 +70,11 @@ const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
                     <div
                       key={i}
                       className={`flex items-center space-x-2 p-2 rounded-md ${
-                        submitted && answerState === 'correct'
+                        submitted && state === 'correct'
                           ? 'bg-green-100'
                           : ''
                       } ${
-                        submitted && answerState === 'incorrect'
+                        submitted && state === 'incorrect'
                           ? 'bg-red-100'
                           : ''
                       }`}
@@ -122,18 +96,19 @@ const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
         return <div key={index}>Unsupported quiz type.</div>;
       })}
       {!submitted && (
-        <Button onClick={handleSubmit}>Check Answers</Button>
+        <Button onClick={() => setSubmitted(true)}>
+          Check Answers
+        </Button>
       )}
     </div>
   );
 };
 
-export default function LessonBlockPage() {
-  const params = useParams();
-  const slug = params.slug as string;
+export default function BlockPage() {
+  const { slug } = useParams<{ slug: string }>();
   const { user } = useUser();
 
-  const [sidebarData, setSidebarData] = useState<SidebarData[]>([]);
+  const [lessons, setLessons] = useState<LessonWithId[]>([]);
   const [activeBlock, setActiveBlock] = useState<LessonBlock | null>(
     null
   );
@@ -142,48 +117,48 @@ export default function LessonBlockPage() {
     Record<string, boolean>
   >({});
 
+  // Load minimal data needed to find the active block
   useEffect(() => {
-    setIsLoading(true);
-    const fetchSidebarData = async () => {
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
       const lessonsQuery = query(
         collection(db, 'lessons'),
         orderBy('order', 'asc')
       );
-      const lessonSnapshot = await getDocs(lessonsQuery);
-      const lessons = lessonSnapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as LessonWithId)
+      const lessonSnap = await getDocs(lessonsQuery);
+      const ls = lessonSnap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as LessonWithId)
       );
 
-      const populatedLessons = await Promise.all(
-        lessons.map(async (lesson) => {
-          const blocksQuery = query(
-            collection(db, 'lessons', lesson.id, 'blocks'),
-            orderBy('order', 'asc')
-          );
-          const blocksSnapshot = await getDocs(blocksQuery);
-          const blocks = blocksSnapshot.docs.map(
-            (doc) => ({ id: doc.id, ...doc.data() } as LessonBlock)
-          );
-          return { ...lesson, blocks };
-        })
-      );
-      setSidebarData(populatedLessons);
-    };
-    fetchSidebarData();
-  }, []);
-
-  useEffect(() => {
-    if (sidebarData.length > 0 && slug) {
-      for (const lesson of sidebarData) {
-        const foundBlock = lesson.blocks.find((p) => p.slug === slug);
-        if (foundBlock) {
-          setActiveBlock(foundBlock);
+      // Find the block by walking each lesson's blocks
+      let found: LessonBlock | null = null;
+      for (const lesson of ls) {
+        const blocksQ = query(
+          collection(db, 'lessons', lesson.id, 'blocks'),
+          orderBy('order', 'asc')
+        );
+        const blocksSnap = await getDocs(blocksQ);
+        const blocks = blocksSnap.docs.map(
+          (d) => ({ id: d.id, ...d.data() } as LessonBlock)
+        );
+        const match = blocks.find((b) => b.slug === slug);
+        if (match) {
+          found = match;
           break;
         }
       }
-    }
-    setIsLoading(false);
-  }, [sidebarData, slug]);
+
+      if (!cancelled) {
+        setLessons(ls);
+        setActiveBlock(found);
+        setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   const blockVocabulary = useMemo(() => {
     if (!activeBlock) return [];
@@ -195,25 +170,15 @@ export default function LessonBlockPage() {
         c.type === 'text' ? c.german : []
       );
     }
-    if (activeBlock.type === 'vocabulary') {
-      return activeBlock.words;
-    }
+    if (activeBlock.type === 'vocabulary') return activeBlock.words;
     return [];
   }, [activeBlock]);
-
-  const handleWordSelection = (germanWord: string) => {
-    setSelectedWords((prev) => ({
-      ...prev,
-      [germanWord]: !prev[germanWord],
-    }));
-  };
 
   const handleAddVocabulary = async () => {
     if (!user || !activeBlock) return;
     const wordsToAdd = blockVocabulary.filter(
-      (word) => selectedWords[word.german]
+      (w) => selectedWords[w.german]
     );
-
     for (const word of wordsToAdd) {
       await addDoc(collection(db, 'userVocabulary'), {
         ...word,
@@ -229,9 +194,9 @@ export default function LessonBlockPage() {
 
   const renderInteractiveText = (
     word: InteractiveWord,
-    index: number
+    i: number
   ) => (
-    <Popover key={index}>
+    <Popover key={`${word.german}-${i}`}>
       <PopoverTrigger asChild>
         <span className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1">
           {word.german}{' '}
@@ -265,11 +230,11 @@ export default function LessonBlockPage() {
     switch (block.type) {
       case 'text':
       case 'grammar':
-        return block.content.map((contentItem, index) => {
+        return block.content.map((contentItem, idx) => {
           if (contentItem.type === 'text') {
             const textBlock = contentItem as LessonContentBlock;
             return (
-              <div key={index} className="mb-6 leading-relaxed">
+              <div key={idx} className="mb-6 leading-relaxed">
                 <p className="text-lg text-gray-800">
                   {textBlock.german.map(renderInteractiveText)}
                 </p>
@@ -283,7 +248,7 @@ export default function LessonBlockPage() {
             const hedgehogBlock = contentItem as HedgehogMessage;
             return (
               <div
-                key={index}
+                key={idx}
                 className="my-8 flex items-center gap-4 bg-amber-100 p-4 rounded-lg"
               >
                 <span className="text-4xl">🦔</span>
@@ -298,23 +263,29 @@ export default function LessonBlockPage() {
       case 'video':
         return (
           <div>
-            <div className="aspect-w-16 aspect-h-9 mb-4">
-              <iframe
-                src={block.videoUrl.replace('watch?v=', 'embed/')}
-                frameBorder="0"
-                allowFullScreen
-                className="w-full h-full rounded-lg"
-              ></iframe>
-            </div>
+            {block.videoUrl ? (
+              <div className="aspect-w-16 aspect-h-9 mb-4">
+                <iframe
+                  src={block.videoUrl.replace('watch?v=', 'embed/')}
+                  frameBorder="0"
+                  allowFullScreen
+                  className="w-full h-full rounded-lg"
+                />
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-100 text-gray-600 rounded-md">
+                Nema video snimka za ovaj deo lekcije.
+              </div>
+            )}
             {block.description && <p>{block.description}</p>}
           </div>
         );
       case 'vocabulary':
         return (
           <div className="space-y-2">
-            {block.words.map((word, index) => (
+            {block.words.map((word, i) => (
               <div
-                key={index}
+                key={`${word.german}-${i}`}
                 className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
               >
                 <span className="font-semibold">
@@ -336,127 +307,92 @@ export default function LessonBlockPage() {
     }
   };
 
+  if (isLoading) {
+    return <div className="text-center p-12">Učitavanje...</div>;
+  }
+
+  if (!activeBlock) {
+    return (
+      <div className="text-center text-gray-500 flex items-center justify-center h-full">
+        <p>Sadržaj nije pronađen. Molimo izaberite blok iz menija.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-65px)]">
-      <aside className="w-full md:w-1/4 bg-gray-50 border-r p-4 overflow-y-auto">
-        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <BookOpen size={20} /> Sadržaj
-        </h2>
-        <nav className="space-y-4">
-          {sidebarData.map((lesson) => (
-            <div key={lesson.id}>
-              <h3 className="font-bold p-2 rounded-md text-gray-800">
-                {lesson.order + 1}. {lesson.title}
-              </h3>
-              <div className="pl-4 mt-1 space-y-1 border-l-2 ml-2">
-                {lesson.blocks.map((block) => (
-                  <Link
-                    key={block.id}
-                    href={`/block/${block.slug}`}
-                    passHref
+    <div>
+      <h1 className="text-3xl md:text-4xl font-bold mb-8 text-gray-900">
+        {activeBlock.title}
+      </h1>
+      {renderLessonBlockContent(activeBlock)}
+
+      {blockVocabulary.length > 0 && (
+        <div className="mt-12 border-t pt-8">
+          <h2 className="text-2xl font-bold mb-4">
+            Dodaj u Rečnik (Sprachgarten)
+          </h2>
+          {user ? (
+            <>
+              <div className="space-y-2">
+                {blockVocabulary.map((word, index) => (
+                  <div
+                    key={`${word.german}-${index}`}
+                    className="flex items-center space-x-2"
                   >
-                    <div
-                      className={`w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 cursor-pointer ${
-                        activeBlock?.id === block.id
-                          ? 'bg-green-100 text-green-800'
-                          : 'text-gray-600 hover:bg-gray-200'
-                      }`}
+                    <Checkbox
+                      id={`vocab-${index}`}
+                      onCheckedChange={() =>
+                        setSelectedWords((p) => ({
+                          ...p,
+                          [word.german]: !p[word.german],
+                        }))
+                      }
+                      checked={!!selectedWords[word.german]}
+                    />
+                    <label
+                      htmlFor={`vocab-${index}`}
+                      className="flex-grow cursor-pointer"
                     >
-                      {blockIcons[block.type] || (
-                        <BookCopy className="h-4 w-4" />
-                      )}
-                      {block.title}
-                    </div>
-                  </Link>
+                      <span className="font-semibold">
+                        {word.german}
+                      </span>{' '}
+                      - <span>{word.serbian}</span>
+                    </label>
+                  </div>
                 ))}
               </div>
-            </div>
-          ))}
-        </nav>
-      </aside>
-      <main className="w-full md:w-3/4 p-6 md:p-8 overflow-y-auto bg-white">
-        {isLoading ? (
-          <div className="text-center p-12">Učitavanje...</div>
-        ) : activeBlock ? (
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-8 text-gray-900">
-              {activeBlock.title}
-            </h1>
-            {renderLessonBlockContent(activeBlock)}
-
-            {blockVocabulary.length > 0 && (
-              <div className="mt-12 border-t pt-8">
-                <h2 className="text-2xl font-bold mb-4">
-                  Dodaj u Rečnik (Sprachgarten)
-                </h2>
-                {user ? (
-                  <>
-                    <div className="space-y-2">
-                      {blockVocabulary.map((word, index) => (
-                        <div
-                          key={`${word.german}-${index}`}
-                          className="flex items-center space-x-2"
-                        >
-                          <Checkbox
-                            id={`vocab-${index}`}
-                            onCheckedChange={() =>
-                              handleWordSelection(word.german)
-                            }
-                            checked={!!selectedWords[word.german]}
-                          />
-                          <label
-                            htmlFor={`vocab-${index}`}
-                            className="flex-grow cursor-pointer"
-                          >
-                            <span className="font-semibold">
-                              {word.german}
-                            </span>{' '}
-                            - <span>{word.serbian}</span>
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                    <Button
-                      onClick={handleAddVocabulary}
-                      className="mt-6"
-                      disabled={Object.values(selectedWords).every(
-                        (v) => !v
-                      )}
-                    >
-                      Dodaj selektovano
-                    </Button>
-                  </>
-                ) : (
-                  <div className="p-4 bg-gray-100 rounded-md text-center">
-                    <p className="text-gray-700">
-                      <Link
-                        href="/login"
-                        className="font-bold text-green-600 hover:underline"
-                      >
-                        Prijavite se
-                      </Link>{' '}
-                      ili{' '}
-                      <Link
-                        href="/signup"
-                        className="font-bold text-green-600 hover:underline"
-                      >
-                        registrujte
-                      </Link>{' '}
-                      da biste sačuvali reči.
-                    </p>
-                  </div>
+              <Button
+                onClick={handleAddVocabulary}
+                className="mt-6"
+                disabled={Object.values(selectedWords).every(
+                  (v) => !v
                 )}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-center text-gray-500 flex items-center justify-center h-full">
-            <p>
-              Sadržaj nije pronađen. Molimo izaberite blok iz menija.
-            </p>
-          </div>
-        )}
-      </main>
+              >
+                Dodaj selektovano
+              </Button>
+            </>
+          ) : (
+            <div className="p-4 bg-gray-100 rounded-md text-center">
+              <p className="text-gray-700">
+                <Link
+                  href="/login"
+                  className="font-bold text-green-600 hover:underline"
+                >
+                  Prijavite se
+                </Link>{' '}
+                ili{' '}
+                <Link
+                  href="/signup"
+                  className="font-bold text-green-600 hover:underline"
+                >
+                  registrujte
+                </Link>{' '}
+                da biste sačuvali reči.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

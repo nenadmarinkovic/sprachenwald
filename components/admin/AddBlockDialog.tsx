@@ -55,7 +55,6 @@ export const AddBlockDialog = ({
   };
 
   const handleSubmit = () => {
-    // filter just in case
     const allowed = Array.from(selectedBlocks).filter(
       (t) => !existingBlockTypes.includes(t)
     );
@@ -67,7 +66,8 @@ export const AddBlockDialog = ({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon">
+        <Button variant="default" size="icon" className="flex w-32">
+          <span>Add block</span>
           <PlusCircle className="h-4 w-4" />
         </Button>
       </DialogTrigger>
