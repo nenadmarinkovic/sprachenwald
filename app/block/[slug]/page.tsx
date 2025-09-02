@@ -1,13 +1,15 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/lib/firebase';
 import {
   collection,
   query,
-  orderBy,
   getDocs,
+  orderBy,
+  addDoc,
+  Timestamp,
 } from 'firebase/firestore';
 import {
   BookOpen,
@@ -23,34 +25,125 @@ import {
   InteractiveWord,
   LessonContentBlock,
   HedgehogMessage,
+  MultipleChoiceQuiz,
+  Quiz,
 } from '@/types/sprachenwald';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { useUser } from '@/hooks/useUser';
 
 const blockIcons: { [key: string]: React.ReactNode } = {
   text: <BookCopy className="h-4 w-4" />,
-  quiz: <CheckCircle className="h-4 w-4" />,
-  video: <Film className="h-4 w-4" />,
   grammar: <Puzzle className="h-4 w-4" />,
+  video: <Film className="h-4 w-4" />,
+  quiz: <CheckCircle className="h-4 w-4" />,
   vocabulary: <Mic className="h-4 w-4" />,
 };
 
 type SidebarData = LessonWithId & { blocks: LessonBlock[] };
 
+const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [submitted, setSubmitted] = useState<boolean>(false);
+
+  const handleAnswerChange = (
+    questionIndex: number,
+    answer: string
+  ) => {
+    setAnswers((prev) => ({ ...prev, [questionIndex]: answer }));
+  };
+
+  const handleSubmit = () => setSubmitted(true);
+
+  const isCorrect = (quiz: MultipleChoiceQuiz, answer: string) => {
+    return quiz.correctAnswer === answer;
+  };
+
+  return (
+    <div className="space-y-8">
+      {quizzes.map((quiz, index) => {
+        if (quiz.type === 'multiple-choice') {
+          return (
+            <div key={index} className="p-4 border rounded-lg">
+              <p className="font-semibold mb-4">
+                {index + 1}. {quiz.question}
+              </p>
+              <RadioGroup
+                onValueChange={(value) =>
+                  handleAnswerChange(index, value)
+                }
+                disabled={submitted}
+              >
+                {quiz.options.map((option, i) => {
+                  const answerState = submitted
+                    ? isCorrect(quiz, option)
+                      ? 'correct'
+                      : answers[index] === option
+                      ? 'incorrect'
+                      : 'none'
+                    : 'none';
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-center space-x-2 p-2 rounded-md ${
+                        submitted && answerState === 'correct'
+                          ? 'bg-green-100'
+                          : ''
+                      } ${
+                        submitted && answerState === 'incorrect'
+                          ? 'bg-red-100'
+                          : ''
+                      }`}
+                    >
+                      <RadioGroupItem
+                        value={option}
+                        id={`q${index}-o${i}`}
+                      />
+                      <Label htmlFor={`q${index}-o${i}`}>
+                        {option}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
+            </div>
+          );
+        }
+        return <div key={index}>Unsupported quiz type.</div>;
+      })}
+      {!submitted && (
+        <Button onClick={handleSubmit}>Check Answers</Button>
+      )}
+    </div>
+  );
+};
+
 export default function LessonBlockPage() {
   const params = useParams();
   const slug = params.slug as string;
+  const { user } = useUser();
 
   const [sidebarData, setSidebarData] = useState<SidebarData[]>([]);
   const [activeBlock, setActiveBlock] = useState<LessonBlock | null>(
     null
   );
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedWords, setSelectedWords] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
+    setIsLoading(true);
     const fetchSidebarData = async () => {
       const lessonsQuery = query(
         collection(db, 'lessons'),
@@ -76,7 +169,6 @@ export default function LessonBlockPage() {
       );
       setSidebarData(populatedLessons);
     };
-
     fetchSidebarData();
   }, []);
 
@@ -93,16 +185,55 @@ export default function LessonBlockPage() {
     setIsLoading(false);
   }, [sidebarData, slug]);
 
+  const blockVocabulary = useMemo(() => {
+    if (!activeBlock) return [];
+    if (
+      activeBlock.type === 'text' ||
+      activeBlock.type === 'grammar'
+    ) {
+      return activeBlock.content.flatMap((c) =>
+        c.type === 'text' ? c.german : []
+      );
+    }
+    if (activeBlock.type === 'vocabulary') {
+      return activeBlock.words;
+    }
+    return [];
+  }, [activeBlock]);
+
+  const handleWordSelection = (germanWord: string) => {
+    setSelectedWords((prev) => ({
+      ...prev,
+      [germanWord]: !prev[germanWord],
+    }));
+  };
+
+  const handleAddVocabulary = async () => {
+    if (!user || !activeBlock) return;
+    const wordsToAdd = blockVocabulary.filter(
+      (word) => selectedWords[word.german]
+    );
+
+    for (const word of wordsToAdd) {
+      await addDoc(collection(db, 'userVocabulary'), {
+        ...word,
+        userId: user.uid,
+        lessonId: activeBlock.lessonId,
+        addedAt: Timestamp.now(),
+        type: 'ostalo',
+      });
+    }
+    alert(`${wordsToAdd.length} reči je dodato u vaš Sprachgarten!`);
+    setSelectedWords({});
+  };
+
   const renderInteractiveText = (
     word: InteractiveWord,
     index: number
   ) => (
     <Popover key={index}>
       <PopoverTrigger asChild>
-        <span
-          className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1"
-          onDoubleClick={() => {}}
-        >
+        <span className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1">
           {word.german}{' '}
         </span>
       </PopoverTrigger>
@@ -164,6 +295,38 @@ export default function LessonBlockPage() {
           }
           return null;
         });
+      case 'video':
+        return (
+          <div>
+            <div className="aspect-w-16 aspect-h-9 mb-4">
+              <iframe
+                src={block.videoUrl.replace('watch?v=', 'embed/')}
+                frameBorder="0"
+                allowFullScreen
+                className="w-full h-full rounded-lg"
+              ></iframe>
+            </div>
+            {block.description && <p>{block.description}</p>}
+          </div>
+        );
+      case 'vocabulary':
+        return (
+          <div className="space-y-2">
+            {block.words.map((word, index) => (
+              <div
+                key={index}
+                className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+              >
+                <span className="font-semibold">
+                  {word.article} {word.german}
+                </span>
+                <span>{word.serbian}</span>
+              </div>
+            ))}
+          </div>
+        );
+      case 'quiz':
+        return <QuizRenderer quizzes={block.quizzes} />;
       default:
         return (
           <div>
@@ -216,10 +379,75 @@ export default function LessonBlockPage() {
           <div className="text-center p-12">Učitavanje...</div>
         ) : activeBlock ? (
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900">
+            <h1 className="text-3xl md:text-4xl font-bold mb-8 text-gray-900">
               {activeBlock.title}
             </h1>
             {renderLessonBlockContent(activeBlock)}
+
+            {blockVocabulary.length > 0 && (
+              <div className="mt-12 border-t pt-8">
+                <h2 className="text-2xl font-bold mb-4">
+                  Dodaj u Rečnik (Sprachgarten)
+                </h2>
+                {user ? (
+                  <>
+                    <div className="space-y-2">
+                      {blockVocabulary.map((word, index) => (
+                        <div
+                          key={`${word.german}-${index}`}
+                          className="flex items-center space-x-2"
+                        >
+                          <Checkbox
+                            id={`vocab-${index}`}
+                            onCheckedChange={() =>
+                              handleWordSelection(word.german)
+                            }
+                            checked={!!selectedWords[word.german]}
+                          />
+                          <label
+                            htmlFor={`vocab-${index}`}
+                            className="flex-grow cursor-pointer"
+                          >
+                            <span className="font-semibold">
+                              {word.german}
+                            </span>{' '}
+                            - <span>{word.serbian}</span>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      onClick={handleAddVocabulary}
+                      className="mt-6"
+                      disabled={Object.values(selectedWords).every(
+                        (v) => !v
+                      )}
+                    >
+                      Dodaj selektovano
+                    </Button>
+                  </>
+                ) : (
+                  <div className="p-4 bg-gray-100 rounded-md text-center">
+                    <p className="text-gray-700">
+                      <Link
+                        href="/login"
+                        className="font-bold text-green-600 hover:underline"
+                      >
+                        Prijavite se
+                      </Link>{' '}
+                      ili{' '}
+                      <Link
+                        href="/signup"
+                        className="font-bold text-green-600 hover:underline"
+                      >
+                        registrujte
+                      </Link>{' '}
+                      da biste sačuvali reči.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center text-gray-500 flex items-center justify-center h-full">

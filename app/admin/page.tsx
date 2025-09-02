@@ -21,7 +21,6 @@ import {
   CheckCircle,
   Mic,
 } from 'lucide-react';
-
 import {
   Card,
   CardContent,
@@ -29,7 +28,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-
 import {
   Lesson,
   LessonWithId,
@@ -40,7 +38,6 @@ import {
   VocabularyLessonBlock,
   GrammarLessonBlock,
 } from '@/types/sprachenwald';
-
 import {
   DndContext,
   DragEndEvent,
@@ -60,7 +57,7 @@ import { EditVideoBlockDialog } from '@/components/admin/EditVideoBlockDialog';
 import { EditQuizBlockDialog } from '@/components/admin/EditQuizBlockDialog';
 import { EditVocabularyBlockDialog } from '@/components/admin/EditVocabularyBlockDialog';
 import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
-import { SortableBlockItem } from '@/components/admin/SortableBlockItem';
+import { SortableAccordionBlockItem } from '@/components/admin/SortableBlockItem';
 
 const BLOCK_TYPES: Array<{
   id: LessonBlock['type'];
@@ -278,6 +275,7 @@ const AdminPage = () => {
       'blocks',
       blockId
     );
+
     await updateDoc(blockRef, data);
     setBlockToEdit(null);
   };
@@ -430,7 +428,7 @@ const AdminPage = () => {
                     strategy={verticalListSortingStrategy}
                   >
                     {lessonBlocks.map((block) => (
-                      <SortableBlockItem
+                      <SortableAccordionBlockItem
                         key={block.id}
                         block={block}
                         onEdit={() => setBlockToEdit(block)}
