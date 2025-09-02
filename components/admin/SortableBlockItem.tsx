@@ -2,8 +2,18 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical } from 'lucide-react';
+import {
+  GripVertical,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { LessonBlock } from '@/types/sprachenwald';
 
 export function SortableBlockItem({
@@ -38,14 +48,31 @@ export function SortableBlockItem({
           {block.order + 1}. {block.title} ({block.type})
         </span>
       </div>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onEdit}>
-          Edit
-        </Button>
-        <Button variant="destructive" size="sm" onClick={onRemove}>
-          Remove
-        </Button>
-      </div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <MoreHorizontal size={16} />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-40 p-1">
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={onEdit}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-destructive hover:text-destructive"
+            onClick={onRemove}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Remove
+          </Button>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

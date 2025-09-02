@@ -28,6 +28,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+
 import {
   Lesson,
   LessonWithId,
@@ -38,6 +40,7 @@ import {
   VocabularyLessonBlock,
   GrammarLessonBlock,
 } from '@/types/sprachenwald';
+
 import {
   DndContext,
   DragEndEvent,
@@ -48,9 +51,10 @@ import {
   arrayMove,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { SortableLessonItem } from '@/components/SortableLessonItem';
 
+import { SortableLessonItem } from '@/components/admin/SortableLessonItem';
 import { AddLessonDialog } from '@/components/admin/AddLessonDialog';
+import { EditLessonDialog } from '@/components/admin/EditLessonDialog';
 import { EditTextBlockDialog } from '@/components/admin/EditTextBlockDialog';
 import { EditVideoBlockDialog } from '@/components/admin/EditVideoBlockDialog';
 import { EditQuizBlockDialog } from '@/components/admin/EditQuizBlockDialog';
@@ -99,61 +103,42 @@ function buildNewBlock(params: {
 }): NewLessonBlockUnion {
   const { blockType, lessonId, lessonTitle, order, title, slug } =
     params;
+  const base = { title, slug, order, lessonId, lessonTitle };
 
   switch (blockType) {
     case 'text':
       return {
+        ...base,
         type: 'text',
-        title,
-        slug,
-        order,
-        lessonId,
-        lessonTitle,
         content: [],
       } satisfies NewTextual;
 
     case 'grammar':
       return {
+        ...base,
         type: 'grammar',
-        title,
-        slug,
-        order,
-        lessonId,
-        lessonTitle,
         content: [],
       } satisfies NewGrammar;
 
     case 'quiz':
       return {
+        ...base,
         type: 'quiz',
-        title,
-        slug,
-        order,
-        lessonId,
-        lessonTitle,
         quizzes: [],
       } satisfies NewQuiz;
 
     case 'video':
       return {
+        ...base,
         type: 'video',
-        title,
-        slug,
-        order,
-        lessonId,
-        lessonTitle,
         videoUrl: '',
         description: '',
       } satisfies NewVideo;
 
     case 'vocabulary':
       return {
+        ...base,
         type: 'vocabulary',
-        title,
-        slug,
-        order,
-        lessonId,
-        lessonTitle,
         words: [],
       } satisfies NewVocabulary;
   }
@@ -164,6 +149,8 @@ const AdminPage = () => {
   const [selectedLesson, setSelectedLesson] =
     useState<LessonWithId | null>(null);
   const [lessonBlocks, setLessonBlocks] = useState<LessonBlock[]>([]);
+  const [lessonToEdit, setLessonToEdit] =
+    useState<LessonWithId | null>(null);
   const [blockToEdit, setBlockToEdit] = useState<LessonBlock | null>(
     null
   );
@@ -245,6 +232,40 @@ const AdminPage = () => {
     await batch.commit();
   };
 
+  const handleAddBlock = async (blockType: LessonBlock['type']) => {
+    if (!selectedLesson) return;
+
+    const blockInfo = BLOCK_TYPES.find((b) => b.id === blockType)!;
+    const blockTitle = prompt(
+      `Enter title for new ${blockInfo.label}:`,
+      blockInfo.label
+    );
+    if (!blockTitle) return;
+
+    const payload = buildNewBlock({
+      blockType,
+      lessonId: selectedLesson.id,
+      lessonTitle: selectedLesson.title,
+      order: lessonBlocks.length,
+      title: blockTitle,
+      slug: createSlug(`${selectedLesson.title}-${blockTitle}`),
+    });
+
+    await addDoc(
+      collection(db, 'lessons', selectedLesson.id, 'blocks'),
+      payload
+    );
+  };
+
+  const handleUpdateLesson = async (
+    lessonId: string,
+    title: string
+  ) => {
+    const slug = createSlug(title);
+    await updateDoc(doc(db, 'lessons', lessonId), { title, slug });
+    setLessonToEdit(null);
+  };
+
   const handleUpdateBlock = async (
     blockId: string,
     data: Partial<LessonBlock>
@@ -303,9 +324,7 @@ const AdminPage = () => {
       newOrder.forEach((block, index) => {
         batch.update(
           doc(db, 'lessons', selectedLesson.id, 'blocks', block.id),
-          {
-            order: index,
-          }
+          { order: index }
         );
       });
       await batch.commit();
@@ -365,9 +384,7 @@ const AdminPage = () => {
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-4">
           <LayoutDashboard /> Admin Panel
         </h1>
-
         <AddLessonDialog onSave={handleAddLesson} />
-
         <div className="flex-grow overflow-y-auto">
           <DndContext
             collisionDetection={closestCenter}
@@ -385,6 +402,7 @@ const AdminPage = () => {
                   onClick={() => setSelectedLesson(lesson)}
                   isSelected={selectedLesson?.id === lesson.id}
                   order={lesson.order}
+                  onEdit={() => setLessonToEdit(lesson)}
                 />
               ))}
             </SortableContext>
@@ -421,11 +439,32 @@ const AdminPage = () => {
                     ))}
                   </SortableContext>
                 </DndContext>
+
                 {lessonBlocks.length === 0 && (
                   <p className="text-gray-500 py-4 text-center">
                     No blocks defined for this lesson.
                   </p>
                 )}
+
+                <div className="mt-4 pt-4 border-t">
+                  <h4 className="text-sm font-semibold mb-2">
+                    Add New Block to {selectedLesson.title}
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {BLOCK_TYPES.map((blockType) => (
+                      <Button
+                        key={blockType.id}
+                        variant="outline"
+                        onClick={() => handleAddBlock(blockType.id)}
+                      >
+                        {blockType.icon}
+                        <span className="ml-2">
+                          {blockType.label}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -433,6 +472,15 @@ const AdminPage = () => {
           <div className="text-center text-gray-500 flex items-center justify-center h-full">
             <p>Select a lesson to see its blocks.</p>
           </div>
+        )}
+
+        {lessonToEdit && (
+          <EditLessonDialog
+            isOpen={!!lessonToEdit}
+            onOpenChange={() => setLessonToEdit(null)}
+            lesson={lessonToEdit}
+            onSave={handleUpdateLesson}
+          />
         )}
 
         {renderEditDialog()}

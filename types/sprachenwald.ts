@@ -35,10 +35,7 @@ export interface FillInTheBlankQuiz {
 export interface MatchQuiz {
   type: 'match';
   question: string;
-  pairs: {
-    prompt: string;
-    answer: string;
-  }[];
+  pairs: { prompt: string; answer: string }[];
 }
 
 export interface AudioQuiz {
