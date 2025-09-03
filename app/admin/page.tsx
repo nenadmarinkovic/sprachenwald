@@ -73,6 +73,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { AddBlockDialog } from '@/components/admin/AddBlockDialog';
 
 const BLOCK_TYPES: Array<{
   id: LessonBlock['type'];
@@ -318,6 +319,38 @@ const AdminPage = () => {
     setBlockToDelete(null);
   };
 
+  const handleAddBlocksToLesson = async (
+    selectedBlockTypes: LessonBlock['type'][]
+  ) => {
+    if (!selectedLesson) return;
+
+    const batch = writeBatch(db);
+
+    selectedBlockTypes.forEach((blockType, index) => {
+      const blockInfo = BLOCK_TYPES.find((b) => b.id === blockType)!;
+      const blockTitle = blockInfo.label;
+
+      const payload = buildNewBlock({
+        blockType,
+        lessonId: selectedLesson.id,
+        lessonTitle: selectedLesson.title,
+        order: lessonBlocks.length + index,
+        title: blockTitle,
+        slug: createSlug(
+          `${selectedLesson.title}-${blockTitle}-${Date.now()}`
+        ),
+      });
+
+      const blockRef = doc(
+        collection(db, 'lessons', selectedLesson.id, 'blocks')
+      );
+      batch.set(blockRef, payload);
+    });
+
+    await batch.commit();
+    setAddBlockOpen(false);
+  };
+
   const handleLessonDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -452,7 +485,7 @@ const AdminPage = () => {
               <Popover>
                 <PopoverTrigger asChild>
                   <button
-                    className="inline-flex items-center justify-center rounded-md border px-3 py-2 hover:bg-gray-50"
+                    className="cursor-pointer inline-flex items-center justify-center rounded-md border px-3 py-2 hover:bg-gray-50"
                     aria-label="Lesson actions"
                   >
                     <MoreHorizontal className="h-5 w-5" />
@@ -545,15 +578,6 @@ const AdminPage = () => {
 
         {renderEditDialog()}
 
-        {blockToDelete && (
-          <DeleteConfirmationDialog
-            isOpen={!!blockToDelete}
-            onOpenChange={() => setBlockToDelete(null)}
-            block={blockToDelete}
-            onConfirm={handleDeleteBlock}
-          />
-        )}
-
         {lessonToDelete && (
           <AlertDialog
             open={!!lessonToDelete}
@@ -584,6 +608,13 @@ const AdminPage = () => {
             </AlertDialogContent>
           </AlertDialog>
         )}
+        <AddBlockDialog
+          isOpen={addBlockOpen}
+          onOpenChange={setAddBlockOpen}
+          onSave={handleAddBlocksToLesson}
+          existingBlockTypes={lessonBlocks.map((b) => b.type)}
+          showTrigger={false}
+        />
       </main>
     </div>
   );

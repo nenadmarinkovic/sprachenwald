@@ -248,9 +248,7 @@ export default function BlockPage() {
       if (cancelled) return;
       setLessons(ls);
 
-      // 2) find the active block & collect blocks for its lesson
       let found: LessonBlock | null = null;
-      let currentLessonBlocks: LessonBlock[] = [];
       let currentLessonId: string | null = null;
 
       for (const lesson of ls) {
@@ -263,7 +261,6 @@ export default function BlockPage() {
           (d) => ({ id: d.id, ...d.data() } as LessonBlock)
         );
 
-        // cache these blocks
         if (!cancelled) {
           setBlocksByLesson((prev) => ({
             ...prev,
@@ -274,7 +271,6 @@ export default function BlockPage() {
         const match = blocks.find((b) => b.slug === slug);
         if (match) {
           found = match;
-          currentLessonBlocks = blocks;
           currentLessonId = lesson.id;
           break;
         }

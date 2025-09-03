@@ -81,7 +81,6 @@ const germanPreviewParser = (
       if (limitChars && isTextNode(node)) {
         const remaining = limitChars - charCount;
         if (remaining <= 0) return <></>;
-
         const text = node.data ?? '';
         if (text.length <= remaining) {
           charCount += text.length;
@@ -125,18 +124,21 @@ export const BlockContentPreview = ({
 
           return (
             <div key={idx} className="mb-3">
-              <p className="mb-3">
-                <strong>German content:</strong>{' '}
-                <span className="text-gray-800">
-                  {germanHtml
-                    ? parse(germanHtml, germanPreviewParser(450))
-                    : '—'}
-                </span>
-              </p>
+              {/* ⚠️ Use block elements to avoid <p> inside <p> */}
+              <div className="mb-1 font-semibold">
+                German content:
+              </div>
+              <div className="text-gray-800">
+                {germanHtml
+                  ? parse(germanHtml, germanPreviewParser(450))
+                  : '—'}
+              </div>
+
               {serbian && (
-                <p className="text-gray-800">
-                  <strong>Prevod:</strong> {serbian}
-                </p>
+                <div className="text-gray-800 mt-2">
+                  <span className="font-semibold">Prevod:</span>{' '}
+                  {serbian}
+                </div>
               )}
             </div>
           );
