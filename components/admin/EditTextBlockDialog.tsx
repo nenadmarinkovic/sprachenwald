@@ -13,7 +13,11 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
 import Typography from '@tiptap/extension-typography';
-import { InteractiveWordExtension } from '@/lib/tiptap/interactive-word';
+import {
+  InteractiveWordExtension,
+  PartOfSpeech,
+  Padez,
+} from '@/lib/tiptap/interactive-word';
 
 import {
   Dialog,
@@ -34,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 
 import {
   LessonBlock,
@@ -48,8 +53,6 @@ type EditTextBlockDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 };
-
-type PartOfSpeech = 'imenica' | 'glagol' | 'pridev' | 'ostalo';
 
 const Toolbar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) return null;
@@ -123,29 +126,33 @@ export const EditTextBlockDialog: React.FC<
 > = ({ block, onSave, isOpen, onOpenChange }) => {
   const [title, setTitle] = useState('');
   const [serbianContent, setSerbianContent] = useState('');
+
   const [panelVisible, setPanelVisible] = useState(false);
   const [iwGerman, setIwGerman] = useState('');
-  const [iwSerbian, setIwSerbian] = useState('');
-  const [iwArticle, setIwArticle] = useState('');
-  const [iwPOS, setIwPOS] = useState<PartOfSpeech | ''>('');
-  const [iwInfo, setIwInfo] = useState('');
-  const [iwExample, setIwExample] = useState('');
+  const [iwPrevod, setIwPrevod] = useState('');
+  const [iwTip, setIwTip] = useState<PartOfSpeech | ''>('');
+  const [iwNote, setIwNote] = useState('');
+  const [iwPadez, setIwPadez] = useState<Padez | ''>('');
+  const [iwClan, setIwClan] = useState('');
+  const [iwGlagol, setIwGlagol] = useState(false);
 
   const iwRangeRef = useRef<{ from: number; to: number } | null>(
     null
   );
   const iwAttrsRef = useRef<{
-    german?: string;
-    serbian?: string | null;
-    article?: string | null;
-    partOfSpeech?: PartOfSpeech | null;
-    info?: string | null;
-    example?: string | null;
+    german?: string | null;
+    prevod?: string | null;
+    tip?: PartOfSpeech | null;
+    note?: string | null;
+    padez?: Padez | null;
+    clan?: string | null;
+    glagol?: 'true' | 'false' | null;
+    slug?: string | null;
   }>({});
 
   const editor = useEditor({
     extensions: [
-      StarterKit, // history included
+      StarterKit,
       Typography,
       Placeholder.configure({ placeholder: 'Napiši nemački tekst…' }),
       CharacterCount,
@@ -160,7 +167,7 @@ export const EditTextBlockDialog: React.FC<
     },
   });
 
-  const computeInteractiveWordRange = useCallback((ed: Editor) => {
+  const computeRange = useCallback((ed: Editor) => {
     const { state } = ed;
     const markType = state.schema.marks['interactiveWord'];
     const sel = state.selection;
@@ -173,14 +180,13 @@ export const EditTextBlockDialog: React.FC<
     (ed: Editor) => {
       const inIW = ed.isActive('interactiveWord');
       setPanelVisible(inIW);
-
       if (!inIW) {
         iwRangeRef.current = null;
         iwAttrsRef.current = {};
         return;
       }
 
-      const range = computeInteractiveWordRange(ed);
+      const range = computeRange(ed);
       if (!range) {
         iwRangeRef.current = null;
         iwAttrsRef.current = {};
@@ -192,17 +198,17 @@ export const EditTextBlockDialog: React.FC<
         {}) as typeof iwAttrsRef.current;
       iwAttrsRef.current = attrs;
 
-      const selectedText =
+      const text =
         ed.state.doc.textBetween(range.from, range.to) || '';
-
-      setIwGerman((attrs.german as string) || selectedText || '');
-      setIwSerbian((attrs.serbian as string) || '');
-      setIwArticle((attrs.article as string) || '');
-      setIwPOS((attrs.partOfSpeech as PartOfSpeech) || '');
-      setIwInfo((attrs.info as string) || '');
-      setIwExample((attrs.example as string) || '');
+      setIwGerman((attrs.german as string) || text || '');
+      setIwPrevod((attrs.prevod as string) || '');
+      setIwTip((attrs.tip as PartOfSpeech) || '');
+      setIwNote((attrs.note as string) || '');
+      setIwPadez((attrs.padez as Padez) || '');
+      setIwClan((attrs.clan as string) || '');
+      setIwGlagol(((attrs.glagol as string) || 'false') === 'true');
     },
-    [computeInteractiveWordRange]
+    [computeRange]
   );
 
   useEffect(() => {
@@ -210,7 +216,6 @@ export const EditTextBlockDialog: React.FC<
     const handleUpdate = () => refreshPanelFromSelection(editor);
     editor.on('selectionUpdate', handleUpdate);
     editor.on('transaction', handleUpdate);
-    // initial
     refreshPanelFromSelection(editor);
     return () => {
       editor.off('selectionUpdate', handleUpdate);
@@ -220,25 +225,26 @@ export const EditTextBlockDialog: React.FC<
 
   useEffect(() => {
     if (!isOpen || !block || !editor) return;
-
     setTitle(block.title);
-    const firstTextBlock = (block.content || []).find(
+    const firstText = (block.content || []).find(
       (c) => (c as LessonContentBlock)?.type === 'text'
     ) as LessonContentBlock | undefined;
 
-    editor.commands.setContent(firstTextBlock?.german ?? '');
-    setSerbianContent(firstTextBlock?.serbian ?? '');
-
+    editor.commands.setContent(firstText?.german ?? '');
+    setSerbianContent(firstText?.serbian ?? '');
     setTimeout(() => editor && refreshPanelFromSelection(editor), 0);
   }, [block, isOpen, editor, refreshPanelFromSelection]);
 
-  const applyAttrToStoredRange = (partial: {
-    serbian?: string;
-    article?: string;
-    partOfSpeech?: PartOfSpeech | '';
-    info?: string;
-    example?: string;
-  }) => {
+  const applyAttr = (
+    partial: Partial<{
+      prevod: string;
+      tip: PartOfSpeech | '';
+      note: string;
+      padez: Padez | '';
+      clan: string;
+      glagol: boolean;
+    }>
+  ) => {
     if (!editor) return;
     const rng = iwRangeRef.current;
     if (!rng) return;
@@ -255,24 +261,24 @@ export const EditTextBlockDialog: React.FC<
       const existing = iwAttrsRef.current || {};
       const merged: Record<string, string> = {
         ...(existing.german ? { german: existing.german } : {}),
-        ...(existing.serbian ? { serbian: existing.serbian } : {}),
-        ...(existing.article ? { article: existing.article } : {}),
-        ...(existing.partOfSpeech
-          ? { partOfSpeech: existing.partOfSpeech }
-          : {}),
-        ...(existing.info ? { info: existing.info } : {}),
-        ...(existing.example ? { example: existing.example } : {}),
+        ...(existing.slug ? { slug: existing.slug } : {}),
+        ...(existing.prevod ? { prevod: existing.prevod } : {}),
+        ...(existing.tip ? { tip: existing.tip } : {}),
+        ...(existing.note ? { note: existing.note } : {}),
+        ...(existing.padez ? { padez: existing.padez } : {}),
+        ...(existing.clan ? { clan: existing.clan } : {}),
+        ...(existing.glagol ? { glagol: existing.glagol } : {}),
       };
 
-      if (partial.serbian !== undefined)
-        merged.serbian = partial.serbian;
-      if (partial.article !== undefined)
-        merged.article = partial.article;
-      if (partial.partOfSpeech !== undefined)
-        merged.partOfSpeech = partial.partOfSpeech || '';
-      if (partial.info !== undefined) merged.info = partial.info;
-      if (partial.example !== undefined)
-        merged.example = partial.example;
+      if (partial.prevod !== undefined)
+        merged.prevod = partial.prevod;
+      if (partial.tip !== undefined) merged.tip = partial.tip || '';
+      if (partial.note !== undefined) merged.note = partial.note;
+      if (partial.padez !== undefined)
+        merged.padez = partial.padez || '';
+      if (partial.clan !== undefined) merged.clan = partial.clan;
+      if (partial.glagol !== undefined)
+        merged.glagol = partial.glagol ? 'true' : 'false';
 
       tr.removeMark(range.from, range.to, markType);
       tr.addMark(range.from, range.to, markType.create(merged));
@@ -281,12 +287,14 @@ export const EditTextBlockDialog: React.FC<
 
       iwRangeRef.current = range;
       iwAttrsRef.current = {
-        german: merged.german,
-        serbian: merged.serbian ?? null,
-        article: merged.article ?? null,
-        partOfSpeech: (merged.partOfSpeech as PartOfSpeech) ?? null,
-        info: merged.info ?? null,
-        example: merged.example ?? null,
+        german: merged.german ?? null,
+        slug: merged.slug ?? null,
+        prevod: merged.prevod ?? null,
+        tip: (merged.tip as PartOfSpeech) ?? null,
+        note: merged.note ?? null,
+        padez: (merged.padez as Padez) ?? null,
+        clan: merged.clan ?? null,
+        glagol: (merged.glagol as 'true' | 'false') ?? null,
       };
       return true;
     });
@@ -301,6 +309,9 @@ export const EditTextBlockDialog: React.FC<
     onSave(block.id, { title, content });
     onOpenChange(false);
   };
+
+  const tipSelectValue = iwTip === '' ? 'none' : iwTip;
+  const padezSelectValue = iwPadez === '' ? 'none' : iwPadez;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -359,84 +370,133 @@ export const EditTextBlockDialog: React.FC<
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <Label>German (from selection)</Label>
+                    <Label>German</Label>
                     <Input value={iwGerman} readOnly />
                   </div>
+
                   <div>
-                    <Label>Serbian</Label>
+                    <Label>Prevod</Label>
                     <Input
-                      value={iwSerbian}
+                      value={iwPrevod}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setIwSerbian(v);
-                        applyAttrToStoredRange({ serbian: v });
+                        setIwPrevod(v);
+                        applyAttr({ prevod: v });
                       }}
                     />
                   </div>
+
                   <div>
-                    <Label>Article</Label>
+                    <Label>Član</Label>
                     <Input
                       placeholder="der / die / das"
-                      value={iwArticle}
+                      value={iwClan}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setIwArticle(v);
-                        applyAttrToStoredRange({ article: v });
+                        setIwClan(v);
+                        applyAttr({ clan: v });
                       }}
                     />
                   </div>
-                  <div className="col-span-2">
-                    <Label>Part of Speech</Label>
+
+                  <div>
+                    <Label>Tip reči</Label>
                     <Select
-                      value={iwPOS || ''}
+                      value={tipSelectValue}
                       onValueChange={(v) => {
+                        if (v === 'none') {
+                          setIwTip('');
+                          applyAttr({ tip: '' });
+                          return;
+                        }
                         const val = v as PartOfSpeech;
-                        setIwPOS(val);
-                        applyAttrToStoredRange({ partOfSpeech: val });
+                        setIwTip(val);
+                        applyAttr({ tip: val });
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose…" />
+                        <SelectValue placeholder="Odaberi…" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">—</SelectItem>
                         <SelectItem value="imenica">
-                          Imenica (Noun)
+                          Imenica
                         </SelectItem>
-                        <SelectItem value="glagol">
-                          Glagol (Verb)
+                        <SelectItem value="glagol">Glagol</SelectItem>
+                        <SelectItem value="pridev">Pridev</SelectItem>
+                        <SelectItem value="prilog">Prilog</SelectItem>
+                        <SelectItem value="zamenica">
+                          Zamenica
                         </SelectItem>
-                        <SelectItem value="pridev">
-                          Pridev (Adjective)
+                        <SelectItem value="predlog">
+                          Predlog
                         </SelectItem>
-                        <SelectItem value="ostalo">
-                          Ostalo (Other)
+                        <SelectItem value="veznik">Veznik</SelectItem>
+                        <SelectItem value="ostalo">Ostalo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label>Padež</Label>
+                    <Select
+                      value={padezSelectValue}
+                      onValueChange={(v) => {
+                        if (v === 'none') {
+                          setIwPadez('');
+                          applyAttr({ padez: '' });
+                          return;
+                        }
+                        const val = v as Padez;
+                        setIwPadez(val);
+                        applyAttr({ padez: val });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="(opciono)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">—</SelectItem>
+                        <SelectItem value="nominativ">
+                          Nominativ
+                        </SelectItem>
+                        <SelectItem value="genitiv">
+                          Genitiv
+                        </SelectItem>
+                        <SelectItem value="dativ">Dativ</SelectItem>
+                        <SelectItem value="akuzativ">
+                          Akuzativ
                         </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2">
-                    <Label>Info (optional)</Label>
-                    <Input
-                      value={iwInfo}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setIwInfo(v);
-                        applyAttrToStoredRange({ info: v });
+
+                  <div className="col-span-2 flex items-center gap-3">
+                    <Switch
+                      checked={iwGlagol}
+                      onCheckedChange={(checked) => {
+                        setIwGlagol(checked);
+                        applyAttr({ glagol: checked });
                       }}
+                      id="iw-glagol"
                     />
+                    <Label htmlFor="iw-glagol">Glagol</Label>
                   </div>
+
                   <div className="col-span-2">
-                    <Label>Example (optional)</Label>
-                    <Input
-                      value={iwExample}
+                    <Label>Text (napomena)</Label>
+                    <Textarea
+                      value={iwNote}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setIwExample(v);
-                        applyAttrToStoredRange({ example: v });
+                        setIwNote(v);
+                        applyAttr({ note: v });
                       }}
+                      rows={3}
                     />
                   </div>
                 </div>
+
                 <div className="flex justify-end mt-3">
                   <Button
                     variant="outline"

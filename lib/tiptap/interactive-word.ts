@@ -1,4 +1,4 @@
-// extensions/interactive-word.ts
+// lib/tiptap/interactive-word.ts
 import {
   Mark,
   mergeAttributes,
@@ -6,15 +6,30 @@ import {
   PasteRule,
 } from '@tiptap/core';
 
-export type PartOfSpeech = 'imenica' | 'glagol' | 'pridev' | 'ostalo';
+export type PartOfSpeech =
+  | 'imenica'
+  | 'glagol'
+  | 'pridev'
+  | 'prilog'
+  | 'zamenica'
+  | 'predlog'
+  | 'veznik'
+  | 'ostalo';
+export type Padez =
+  | 'nominativ'
+  | 'genitiv'
+  | 'dativ'
+  | 'akuzativ'
+  | '';
 
 export interface InteractiveWordAttributes {
   german?: string | null;
-  serbian?: string | null;
-  article?: string | null;
-  partOfSpeech?: PartOfSpeech | null;
-  info?: string | null;
-  example?: string | null;
+  prevod?: string | null;
+  tip?: PartOfSpeech | null;
+  note?: string | null;
+  padez?: Padez | null;
+  clan?: string | null;
+  glagol?: 'true' | 'false' | null;
   slug?: string | null;
 }
 
@@ -53,11 +68,12 @@ export const InteractiveWordExtension =
     addAttributes() {
       return {
         german: { default: null },
-        serbian: { default: null },
-        article: { default: null },
-        partOfSpeech: { default: null },
-        info: { default: null },
-        example: { default: null },
+        prevod: { default: null },
+        tip: { default: null },
+        note: { default: null },
+        padez: { default: null },
+        clan: { default: null },
+        glagol: { default: null },
         slug: { default: null },
       };
     },
@@ -69,21 +85,28 @@ export const InteractiveWordExtension =
           getAttrs: (el) => {
             if (typeof el === 'string') return false;
             const german = el.getAttribute('data-german');
-            const serbian = el.getAttribute('data-serbian');
-            const article = el.getAttribute('data-article');
-            const partOfSpeech = el.getAttribute(
-              'data-part-of-speech'
+            const prevod = el.getAttribute('data-prevod');
+            const tip = el.getAttribute(
+              'data-tip'
             ) as PartOfSpeech | null;
-            const info = el.getAttribute('data-info');
-            const example = el.getAttribute('data-example');
+            const note = el.getAttribute('data-note');
+            const padez = el.getAttribute(
+              'data-padez'
+            ) as Padez | null;
+            const clan = el.getAttribute('data-clan');
+            const glagol = el.getAttribute('data-glagol') as
+              | 'true'
+              | 'false'
+              | null;
             const slug = el.getAttribute('data-slug');
             return {
               german,
-              serbian,
-              article,
-              partOfSpeech,
-              info,
-              example,
+              prevod,
+              tip,
+              note,
+              padez,
+              clan,
+              glagol,
               slug,
             };
           },
@@ -92,8 +115,6 @@ export const InteractiveWordExtension =
     },
 
     renderHTML({ HTMLAttributes }) {
-      const pos =
-        (HTMLAttributes.partOfSpeech as PartOfSpeech | null) ?? null;
       const german = (HTMLAttributes.german as string | null) ?? '';
       const slug =
         (HTMLAttributes.slug as string | null) ??
@@ -104,16 +125,15 @@ export const InteractiveWordExtension =
         mergeAttributes(HTMLAttributes, {
           'data-interactive-word': 'true',
           'data-german': german || '',
-          'data-serbian':
-            (HTMLAttributes.serbian as string | null) || '',
-          'data-article':
-            (HTMLAttributes.article as string | null) || '',
-          'data-part-of-speech': pos || '',
-          'data-info': (HTMLAttributes.info as string | null) || '',
-          'data-example':
-            (HTMLAttributes.example as string | null) || '',
+          'data-prevod':
+            (HTMLAttributes.prevod as string | null) || '',
+          'data-tip': (HTMLAttributes.tip as string | null) || '',
+          'data-note': (HTMLAttributes.note as string | null) || '',
+          'data-padez': (HTMLAttributes.padez as string | null) || '',
+          'data-clan': (HTMLAttributes.clan as string | null) || '',
+          'data-glagol':
+            (HTMLAttributes.glagol as string | null) || '',
           'data-slug': slug || '',
-          class: `sw-iw ${pos ? `sw-iw--${pos}` : ''}`,
         }),
         0,
       ];
@@ -126,7 +146,6 @@ export const InteractiveWordExtension =
           handler: ({ state, range, match, commands }) => {
             const word = (match[1] || '').trim();
             if (!word) return;
-
             state.tr.insertText(word, range.from, range.to);
             commands.setTextSelection({
               from: range.from,
@@ -148,7 +167,6 @@ export const InteractiveWordExtension =
           handler: ({ state, range, match, commands }) => {
             const word = (match[1] || '').trim();
             if (!word) return;
-
             state.tr.insertText(word, range.from, range.to);
             commands.setTextSelection({
               from: range.from,

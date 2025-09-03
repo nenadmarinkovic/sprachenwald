@@ -141,6 +141,13 @@ mark[data-color='#008000'] {
   background-color: #dcfce7;
 }
 
+[data-interactive-word='true'] {
+  background-color: #bdede477;
+  padding: 0.12em 0.2em;
+  border-radius: 0.25em;
+  cursor: pointer;
+}
+
 .ProseMirror {
   outline: none;
   min-height: 150px;

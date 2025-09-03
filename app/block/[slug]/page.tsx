@@ -14,26 +14,19 @@ import {
 import {
   LessonWithId,
   LessonBlock,
-  InteractiveWord,
+  InteractiveWord as VocabWord, // mapped below
   LessonContentBlock,
   HedgehogMessage,
   MultipleChoiceQuiz,
   Quiz,
 } from '@/types/sprachenwald';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  RadioGroup,
-  RadioGroupItem,
-} from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
+
 import parse, { DOMNode } from 'html-react-parser';
 import {
   type Node as DomNodeBase,
@@ -41,22 +34,53 @@ import {
   Text,
 } from 'domhandler';
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+
+type PartOfSpeech =
+  | 'imenica'
+  | 'glagol'
+  | 'pridev'
+  | 'prilog'
+  | 'zamenica'
+  | 'predlog'
+  | 'veznik'
+  | 'ostalo';
+
+type Padez =
+  | 'nominativ'
+  | 'genitiv'
+  | 'dativ'
+  | 'akuzativ'
+  | 'vokativ'
+  | 'instrumental'
+  | 'lokativ'
+  | '';
+
 const isDomElement = (n: DOMNode): n is DomElement => {
   const t = (n as DomNodeBase).type;
   return t === 'tag' || t === 'script' || t === 'style';
 };
-
-const isTextNode = (n: DOMNode): n is Text => {
-  return (n as DomNodeBase).type === 'text';
-};
-
+const isTextNode = (n: DOMNode): n is Text =>
+  (n as DomNodeBase).type === 'text';
 const getInnerText = (el: DomElement): string =>
-  ((el as DomElement).children ?? [])
+  (el.children ?? [])
     .map((child) => {
-      const domNodeChild = child as DOMNode;
-      if (isTextNode(domNodeChild)) return domNodeChild.data ?? '';
-      if (isDomElement(domNodeChild))
-        return getInnerText(domNodeChild as DomElement);
+      const c = child as DOMNode;
+      if (isTextNode(c)) return (c as Text).data ?? '';
+      if (isDomElement(c)) return getInnerText(c as DomElement);
       return '';
     })
     .join('')
@@ -65,10 +89,8 @@ const getInnerText = (el: DomElement): string =>
 const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
-
   const handleAnswerChange = (idx: number, answer: string) =>
-    setAnswers((prev) => ({ ...prev, [idx]: answer }));
-
+    setAnswers((p) => ({ ...p, [idx]: answer }));
   const isCorrect = (quiz: MultipleChoiceQuiz, answer: string) =>
     quiz.correctAnswer === answer;
 
@@ -81,10 +103,7 @@ const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
               <p className="font-semibold mb-4">
                 {index + 1}. {quiz.question}
               </p>
-              <RadioGroup
-                onValueChange={(v) => handleAnswerChange(index, v)}
-                disabled={submitted}
-              >
+              <div className="space-y-2">
                 {quiz.options.map((option, i) => {
                   const state = submitted
                     ? isCorrect(quiz, option)
@@ -94,7 +113,7 @@ const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
                       : 'none'
                     : 'none';
                   return (
-                    <div
+                    <label
                       key={i}
                       className={`flex items-center space-x-2 p-2 rounded-md ${
                         submitted && state === 'correct'
@@ -106,64 +125,94 @@ const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
                           : ''
                       }`}
                     >
-                      <RadioGroupItem
+                      <input
+                        type="radio"
+                        name={`q${index}`}
                         value={option}
-                        id={`q${index}-o${i}`}
+                        onChange={() =>
+                          handleAnswerChange(index, option)
+                        }
+                        disabled={submitted}
                       />
-                      <Label htmlFor={`q${index}-o${i}`}>
-                        {option}
-                      </Label>
-                    </div>
+                      <span>{option}</span>
+                    </label>
                   );
                 })}
-              </RadioGroup>
+              </div>
+              {!submitted && (
+                <Button
+                  onClick={() => setSubmitted(true)}
+                  className="mt-3"
+                >
+                  Check Answers
+                </Button>
+              )}
             </div>
           );
         }
         return <div key={index}>Unsupported quiz type.</div>;
       })}
-      {!submitted && (
-        <Button onClick={() => setSubmitted(true)}>
-          Check Answers
-        </Button>
-      )}
     </div>
   );
 };
 
+type UIWord = {
+  german: string;
+  prevod?: string;
+  tip?: PartOfSpeech | '';
+  note?: string;
+  padez?: Padez | '';
+  clan?: string;
+  glagol?: boolean;
+};
+
 const InteractiveWordPopover = ({
   word,
+  highlighted,
 }: {
-  word: InteractiveWord;
+  word: UIWord;
+  highlighted: boolean;
 }) => {
+  const pill = (label: string) => (
+    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs">
+      {label}
+    </span>
+  );
+
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <span className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1">
+        <span
+          className={
+            highlighted
+              ? 'cursor-pointer rounded px-1 bg-yellow-100 ring-1 ring-yellow-300'
+              : 'cursor-pointer'
+          }
+        >
           {word.german}
         </span>
       </PopoverTrigger>
-      <PopoverContent className="w-auto z-50">
-        <div className="p-2 space-y-1">
-          <p className="font-bold text-lg">{word.german}</p>
-          <p className="text-md text-gray-600">{word.serbian}</p>
-          {word.partOfSpeech && (
-            <p className="text-sm font-medium text-purple-600 capitalize">
-              {word.partOfSpeech}
-            </p>
+      <PopoverContent className="w-72 z-50">
+        <div className="space-y-2">
+          <div className="text-lg font-semibold">{word.german}</div>
+          {word.prevod && (
+            <div>
+              <span className="text-muted-foreground text-xs">
+                Prevod:{' '}
+              </span>
+              <span className="font-medium">{word.prevod}</span>
+            </div>
           )}
-          {word.info && (
-            <p className="text-sm text-gray-500">({word.info})</p>
-          )}
-          {word.article && (
-            <p className="text-sm text-gray-500">
-              Član: {word.article}
-            </p>
-          )}
-          {word.example && (
-            <p className="text-sm text-gray-500">
-              Primer: {word.example}
-            </p>
+          <div className="flex flex-wrap gap-2">
+            {word.tip && pill(`Tip: ${word.tip}`)}
+            {word.padez && pill(`Padež: ${word.padez}`)}
+            {word.clan && pill(`Član: ${word.clan}`)}
+            {word.glagol && pill('Glagol')}
+          </div>
+          {word.note && (
+            <div className="text-sm text-muted-foreground">
+              {word.note}
+            </div>
           )}
         </div>
       </PopoverContent>
@@ -182,6 +231,10 @@ export default function BlockPage() {
   const [selectedWords, setSelectedWords] = useState<
     Record<string, boolean>
   >({});
+
+  const [filterTip, setFilterTip] = useState<PartOfSpeech | ''>('');
+  const [filterPadez, setFilterPadez] = useState<Padez | ''>('');
+  const [filterGlagol, setFilterGlagol] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,7 +278,7 @@ export default function BlockPage() {
 
   const blockVocabulary = useMemo(() => {
     if (!activeBlock) return [];
-    const vocabulary: InteractiveWord[] = [];
+    const vocabulary: VocabWord[] = [];
 
     if (
       activeBlock.type === 'text' ||
@@ -244,14 +297,14 @@ export default function BlockPage() {
                 vocabulary.push({
                   german:
                     domNode.attribs['data-german'] || inner || '',
-                  serbian: domNode.attribs['data-serbian'] || '',
-                  article: domNode.attribs['data-article'] || '',
-                  partOfSpeech:
-                    domNode.attribs['data-part-of-speech'] || '',
-                  info: domNode.attribs['data-info'] || '',
-                  example: domNode.attribs['data-example'] || '',
-                });
+                  serbian: domNode.attribs['data-prevod'] || '',
+                  article: domNode.attribs['data-clan'] || '',
+                  partOfSpeech: domNode.attribs['data-tip'] || '',
+                  info: domNode.attribs['data-note'] || '',
+                  example: '',
+                } as VocabWord);
               }
+              return undefined;
             },
           });
         }
@@ -287,17 +340,40 @@ export default function BlockPage() {
         isDomElement(domNode) &&
         domNode.attribs?.['data-interactive-word']
       ) {
+        const attrs = domNode.attribs;
+        const tip = (attrs['data-tip'] || '') as PartOfSpeech | '';
+        const padez = (attrs['data-padez'] || '') as Padez | '';
+        const glagol = (attrs['data-glagol'] || '') === 'true';
+
+        const matchesTip = filterTip ? tip === filterTip : true;
+        const matchesPadez = filterPadez
+          ? padez === filterPadez
+          : true;
+        const matchesGlagol = filterGlagol ? glagol === true : true;
+        const shouldHighlight =
+          matchesTip && matchesPadez && matchesGlagol;
+
         const inner = getInnerText(domNode);
-        const wordData: InteractiveWord = {
-          german: domNode.attribs['data-german'] || inner || '…',
-          serbian: domNode.attribs['data-serbian'] || '…',
-          article: domNode.attribs['data-article'] || '',
-          partOfSpeech: domNode.attribs['data-part-of-speech'] || '',
-          info: domNode.attribs['data-info'] || '',
-          example: domNode.attribs['data-example'] || '',
+        const german = attrs['data-german'] || inner || '…';
+
+        const uiWord: UIWord = {
+          german,
+          prevod: attrs['data-prevod'] || '',
+          tip,
+          note: attrs['data-note'] || '',
+          padez,
+          clan: attrs['data-clan'] || '',
+          glagol,
         };
-        return <InteractiveWordPopover word={wordData} />;
+
+        return (
+          <InteractiveWordPopover
+            word={uiWord}
+            highlighted={shouldHighlight}
+          />
+        );
       }
+      return undefined;
     },
   };
 
@@ -310,12 +386,127 @@ export default function BlockPage() {
             const textBlock = contentItem as LessonContentBlock;
             return (
               <div key={idx} className="mb-6 leading-relaxed">
+                {idx === 0 && (
+                  <div className="mb-4 flex flex-wrap items-center gap-3 p-3 border rounded-md bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm">Tip reči</Label>
+                      <Select
+                        value={filterTip || 'all'}
+                        onValueChange={(v) =>
+                          setFilterTip(
+                            v === 'all' ? '' : (v as PartOfSpeech)
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-40">
+                          <SelectValue placeholder="Sve" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Sve</SelectItem>
+                          <SelectItem value="imenica">
+                            Imenica
+                          </SelectItem>
+                          <SelectItem value="glagol">
+                            Glagol
+                          </SelectItem>
+                          <SelectItem value="pridev">
+                            Pridev
+                          </SelectItem>
+                          <SelectItem value="prilog">
+                            Prilog
+                          </SelectItem>
+                          <SelectItem value="zamenica">
+                            Zamenica
+                          </SelectItem>
+                          <SelectItem value="predlog">
+                            Predlog
+                          </SelectItem>
+                          <SelectItem value="veznik">
+                            Veznik
+                          </SelectItem>
+                          <SelectItem value="ostalo">
+                            Ostalo
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm">Padež</Label>
+                      <Select
+                        value={filterPadez || 'all'}
+                        onValueChange={(v) =>
+                          setFilterPadez(
+                            v === 'all' ? '' : (v as Padez)
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-40">
+                          <SelectValue placeholder="Svi" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Svi</SelectItem>
+                          <SelectItem value="nominativ">
+                            Nominativ
+                          </SelectItem>
+                          <SelectItem value="genitiv">
+                            Genitiv
+                          </SelectItem>
+                          <SelectItem value="dativ">Dativ</SelectItem>
+                          <SelectItem value="akuzativ">
+                            Akuzativ
+                          </SelectItem>
+                          <SelectItem value="vokativ">
+                            Vokativ
+                          </SelectItem>
+                          <SelectItem value="instrumental">
+                            Instrumental
+                          </SelectItem>
+                          <SelectItem value="lokativ">
+                            Lokativ
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={filterGlagol}
+                        onCheckedChange={setFilterGlagol}
+                        id="filter-glagol"
+                      />
+                      <Label
+                        htmlFor="filter-glagol"
+                        className="text-sm"
+                      >
+                        Samo glagoli
+                      </Label>
+                    </div>
+
+                    {(filterTip || filterPadez || filterGlagol) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setFilterTip('');
+                          setFilterPadez('');
+                          setFilterGlagol(false);
+                        }}
+                      >
+                        Resetuj filtere
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 <div className="prose max-w-none text-lg">
                   {parse(textBlock.german, parserOptions)}
                 </div>
-                <p className="text-md text-gray-500 mt-2">
-                  {textBlock.serbian}
-                </p>
+                {textBlock.serbian && (
+                  <p className="text-md text-gray-500 mt-2">
+                    {textBlock.serbian}
+                  </p>
+                )}
               </div>
             );
           }
@@ -335,6 +526,7 @@ export default function BlockPage() {
           }
           return null;
         });
+
       case 'video':
         return (
           <div>
@@ -355,6 +547,7 @@ export default function BlockPage() {
             {block.description && <p>{block.description}</p>}
           </div>
         );
+
       case 'vocabulary':
         return (
           <div className="space-y-2">
@@ -371,8 +564,10 @@ export default function BlockPage() {
             ))}
           </div>
         );
+
       case 'quiz':
         return <QuizRenderer quizzes={block.quizzes} />;
+
       default:
         return (
           <div>
@@ -382,10 +577,8 @@ export default function BlockPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading)
     return <div className="text-center p-12">Učitavanje...</div>;
-  }
-
   if (!activeBlock) {
     return (
       <div className="text-center text-gray-500 flex items-center justify-center h-full">
