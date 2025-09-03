@@ -119,7 +119,7 @@ const ProfilePage = () => {
               >
                 Name
               </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <div className="mt-1 relative rounded-md ">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <User className="h-5 w-5 text-gray-400" />
                 </div>
@@ -141,7 +141,7 @@ const ProfilePage = () => {
               >
                 Email
               </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <div className="mt-1 relative rounded-md ">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-5 w-5 text-gray-400" />
                 </div>
@@ -163,7 +163,7 @@ const ProfilePage = () => {
               >
                 New Password
               </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <div className="mt-1 relative rounded-md ">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-gray-400" />
                 </div>
@@ -186,7 +186,7 @@ const ProfilePage = () => {
               >
                 Current Password (required for email/password changes)
               </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <div className="mt-1 relative rounded-md ">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Shield className="h-5 w-5 text-gray-400" />
                 </div>
@@ -209,7 +209,7 @@ const ProfilePage = () => {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md  text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
                 Update Profile
               </button>

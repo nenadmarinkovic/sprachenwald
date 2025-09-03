@@ -42,7 +42,7 @@ import {
 import LessonFilters, {
   PartOfSpeech,
 } from '@/components/LessonFilters';
-import NextBlockNav from '@/components/NextBlockNav';
+import NextBlockNav from '@/components/BlockPager';
 
 const isDomElement = (n: DOMNode): n is DomElement => {
   const t = (n as DomNodeBase).type;

@@ -47,7 +47,7 @@ const DashboardPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
+      <header className="bg-white border-b">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-green-600">
             Dashboard
@@ -75,7 +75,7 @@ const DashboardPage = () => {
       </header>
       <main className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className=" transition-shadow">
             <Link href="/block/sprachenweg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -90,7 +90,7 @@ const DashboardPage = () => {
               </CardContent>
             </Link>
           </Card>
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className=" transition-shadow">
             <Link href="/sprachenstadt">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -105,7 +105,7 @@ const DashboardPage = () => {
               </CardContent>
             </Link>
           </Card>
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className=" transition-shadow">
             <Link href="/sprachenzug">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -120,7 +120,7 @@ const DashboardPage = () => {
               </CardContent>
             </Link>
           </Card>
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className=" transition-shadow">
             <Link href="/sprachgarten">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

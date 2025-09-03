@@ -4,7 +4,7 @@ import { BookMarked } from 'lucide-react';
 const CoursesPage = () => {
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
+      <header className="bg-white ">
         <div className="container mx-auto px-6 py-12 text-center">
           <h1 className="text-4xl md:text-5xl font-extrabold text-gray-800">
             Naši kursevi
