@@ -42,6 +42,7 @@ import {
 import LessonFilters, {
   PartOfSpeech,
 } from '@/components/LessonFilters';
+import NextBlockNav from '@/components/NextBlockNav';
 
 const isDomElement = (n: DOMNode): n is DomElement => {
   const t = (n as DomNodeBase).type;
@@ -225,11 +226,17 @@ export default function BlockPage() {
     akuzativ: false,
   });
   const [colorByArticle, setColorByArticle] = useState(false);
+  const [lessons, setLessons] = useState<LessonWithId[]>([]);
+  const [blocksByLesson, setBlocksByLesson] = useState<
+    Record<string, LessonBlock[]>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setIsLoading(true);
+
+      // 1) load ordered lessons
       const lessonsQuery = query(
         collection(db, 'lessons'),
         orderBy('order', 'asc')
@@ -238,8 +245,14 @@ export default function BlockPage() {
       const ls = lessonSnap.docs.map(
         (d) => ({ id: d.id, ...d.data() } as LessonWithId)
       );
+      if (cancelled) return;
+      setLessons(ls);
 
+      // 2) find the active block & collect blocks for its lesson
       let found: LessonBlock | null = null;
+      let currentLessonBlocks: LessonBlock[] = [];
+      let currentLessonId: string | null = null;
+
       for (const lesson of ls) {
         const blocksQ = query(
           collection(db, 'lessons', lesson.id, 'blocks'),
@@ -249,10 +262,44 @@ export default function BlockPage() {
         const blocks = blocksSnap.docs.map(
           (d) => ({ id: d.id, ...d.data() } as LessonBlock)
         );
+
+        // cache these blocks
+        if (!cancelled) {
+          setBlocksByLesson((prev) => ({
+            ...prev,
+            [lesson.id]: blocks,
+          }));
+        }
+
         const match = blocks.find((b) => b.slug === slug);
         if (match) {
           found = match;
+          currentLessonBlocks = blocks;
+          currentLessonId = lesson.id;
           break;
+        }
+      }
+
+      // 3) (optional) prefetch next lesson's blocks for smoother nav
+      if (currentLessonId) {
+        const currentIdx = ls.findIndex(
+          (l) => l.id === currentLessonId
+        );
+        const nextLesson =
+          currentIdx !== -1 ? ls[currentIdx + 1] : undefined;
+        if (nextLesson && !cancelled) {
+          const blocksQ = query(
+            collection(db, 'lessons', nextLesson.id, 'blocks'),
+            orderBy('order', 'asc')
+          );
+          const blocksSnap = await getDocs(blocksQ);
+          const blocks = blocksSnap.docs.map(
+            (d) => ({ id: d.id, ...d.data() } as LessonBlock)
+          );
+          setBlocksByLesson((prev) => ({
+            ...prev,
+            [nextLesson.id]: blocks,
+          }));
         }
       }
 
@@ -516,6 +563,16 @@ export default function BlockPage() {
         {activeBlock.title}
       </h1>
       {renderLessonBlockContent(activeBlock)}
+
+      {activeBlock && (
+        <NextBlockNav
+          lessons={lessons}
+          blocksByLesson={blocksByLesson}
+          currentLessonId={activeBlock.lessonId}
+          currentBlockSlug={activeBlock.slug}
+          className="mt-12"
+        />
+      )}
 
       {blockVocabulary.length > 0 && (
         <div className="mt-12 border-t pt-8">
