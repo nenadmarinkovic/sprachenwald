@@ -6,11 +6,12 @@ export interface InteractiveWord {
   info?: string;
   article?: string;
   example?: string;
+  partOfSpeech?: string;
 }
 
 export interface LessonContentBlock {
   type: 'text';
-  german: InteractiveWord[];
+  german: string;
   serbian: string;
 }
 

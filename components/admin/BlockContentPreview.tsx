@@ -19,7 +19,11 @@ export const BlockContentPreview = ({
                   <div key={index}>
                     <p>
                       <strong>DE:</strong>{' '}
-                      {item.german.map((w) => w.german).join(' ')}
+                      {Array.isArray(item.german)
+                        ? item.german
+                            .map((w: { german: string }) => w.german)
+                            .join(' ')
+                        : item.german}
                     </p>
                     <p>
                       <strong>SRB:</strong> {item.serbian}

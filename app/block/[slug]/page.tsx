@@ -34,6 +34,33 @@ import {
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
+import parse, { DOMNode } from 'html-react-parser';
+import {
+  type Node as DomNodeBase,
+  type Element as DomElement,
+  Text,
+} from 'domhandler';
+
+const isDomElement = (n: DOMNode): n is DomElement => {
+  const t = (n as DomNodeBase).type;
+  return t === 'tag' || t === 'script' || t === 'style';
+};
+
+const isTextNode = (n: DOMNode): n is Text => {
+  return (n as DomNodeBase).type === 'text';
+};
+
+const getInnerText = (el: DomElement): string =>
+  ((el as DomElement).children ?? [])
+    .map((child) => {
+      const domNodeChild = child as DOMNode;
+      if (isTextNode(domNodeChild)) return domNodeChild.data ?? '';
+      if (isDomElement(domNodeChild))
+        return getInnerText(domNodeChild as DomElement);
+      return '';
+    })
+    .join('')
+    .trim();
 
 const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -104,11 +131,50 @@ const QuizRenderer = ({ quizzes }: { quizzes: Quiz[] }) => {
   );
 };
 
+const InteractiveWordPopover = ({
+  word,
+}: {
+  word: InteractiveWord;
+}) => {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <span className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1">
+          {word.german}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto z-50">
+        <div className="p-2 space-y-1">
+          <p className="font-bold text-lg">{word.german}</p>
+          <p className="text-md text-gray-600">{word.serbian}</p>
+          {word.partOfSpeech && (
+            <p className="text-sm font-medium text-purple-600 capitalize">
+              {word.partOfSpeech}
+            </p>
+          )}
+          {word.info && (
+            <p className="text-sm text-gray-500">({word.info})</p>
+          )}
+          {word.article && (
+            <p className="text-sm text-gray-500">
+              Član: {word.article}
+            </p>
+          )}
+          {word.example && (
+            <p className="text-sm text-gray-500">
+              Primer: {word.example}
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 export default function BlockPage() {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useUser();
 
-  const [lessons, setLessons] = useState<LessonWithId[]>([]);
   const [activeBlock, setActiveBlock] = useState<LessonBlock | null>(
     null
   );
@@ -117,7 +183,6 @@ export default function BlockPage() {
     Record<string, boolean>
   >({});
 
-  // Load minimal data needed to find the active block
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -131,7 +196,6 @@ export default function BlockPage() {
         (d) => ({ id: d.id, ...d.data() } as LessonWithId)
       );
 
-      // Find the block by walking each lesson's blocks
       let found: LessonBlock | null = null;
       for (const lesson of ls) {
         const blocksQ = query(
@@ -150,7 +214,6 @@ export default function BlockPage() {
       }
 
       if (!cancelled) {
-        setLessons(ls);
         setActiveBlock(found);
         setIsLoading(false);
       }
@@ -162,16 +225,42 @@ export default function BlockPage() {
 
   const blockVocabulary = useMemo(() => {
     if (!activeBlock) return [];
+    const vocabulary: InteractiveWord[] = [];
+
     if (
       activeBlock.type === 'text' ||
       activeBlock.type === 'grammar'
     ) {
-      return activeBlock.content.flatMap((c) =>
-        c.type === 'text' ? c.german : []
-      );
+      activeBlock.content.forEach((c) => {
+        if (c.type === 'text') {
+          const contentBlock = c as LessonContentBlock;
+          parse(contentBlock.german, {
+            replace: (domNode: DOMNode) => {
+              if (
+                isDomElement(domNode) &&
+                domNode.attribs?.['data-interactive-word']
+              ) {
+                const inner = getInnerText(domNode);
+                vocabulary.push({
+                  german:
+                    domNode.attribs['data-german'] || inner || '',
+                  serbian: domNode.attribs['data-serbian'] || '',
+                  article: domNode.attribs['data-article'] || '',
+                  partOfSpeech:
+                    domNode.attribs['data-part-of-speech'] || '',
+                  info: domNode.attribs['data-info'] || '',
+                  example: domNode.attribs['data-example'] || '',
+                });
+              }
+            },
+          });
+        }
+      });
+    } else if (activeBlock.type === 'vocabulary') {
+      vocabulary.push(...activeBlock.words);
     }
-    if (activeBlock.type === 'vocabulary') return activeBlock.words;
-    return [];
+
+    return vocabulary;
   }, [activeBlock]);
 
   const handleAddVocabulary = async () => {
@@ -192,39 +281,25 @@ export default function BlockPage() {
     setSelectedWords({});
   };
 
-  const renderInteractiveText = (
-    word: InteractiveWord,
-    i: number
-  ) => (
-    <Popover key={`${word.german}-${i}`}>
-      <PopoverTrigger asChild>
-        <span className="cursor-pointer font-semibold text-blue-700 hover:bg-blue-100 rounded p-1">
-          {word.german}{' '}
-        </span>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto z-50">
-        <div className="p-2">
-          <p className="font-bold text-lg">{word.german}</p>
-          <p className="text-md text-gray-600">{word.serbian}</p>
-          {word.info && (
-            <p className="text-sm text-gray-500 mt-1">
-              ({word.info})
-            </p>
-          )}
-          {word.article && (
-            <p className="text-sm text-gray-500 mt-1">
-              Član: {word.article}
-            </p>
-          )}
-          {word.example && (
-            <p className="text-sm text-gray-500 mt-1">
-              Primer: {word.example}
-            </p>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
+  const parserOptions = {
+    replace: (domNode: DOMNode) => {
+      if (
+        isDomElement(domNode) &&
+        domNode.attribs?.['data-interactive-word']
+      ) {
+        const inner = getInnerText(domNode);
+        const wordData: InteractiveWord = {
+          german: domNode.attribs['data-german'] || inner || '…',
+          serbian: domNode.attribs['data-serbian'] || '…',
+          article: domNode.attribs['data-article'] || '',
+          partOfSpeech: domNode.attribs['data-part-of-speech'] || '',
+          info: domNode.attribs['data-info'] || '',
+          example: domNode.attribs['data-example'] || '',
+        };
+        return <InteractiveWordPopover word={wordData} />;
+      }
+    },
+  };
 
   const renderLessonBlockContent = (block: LessonBlock) => {
     switch (block.type) {
@@ -235,9 +310,9 @@ export default function BlockPage() {
             const textBlock = contentItem as LessonContentBlock;
             return (
               <div key={idx} className="mb-6 leading-relaxed">
-                <p className="text-lg text-gray-800">
-                  {textBlock.german.map(renderInteractiveText)}
-                </p>
+                <div className="prose max-w-none text-lg">
+                  {parse(textBlock.german, parserOptions)}
+                </div>
                 <p className="text-md text-gray-500 mt-2">
                   {textBlock.serbian}
                 </p>
