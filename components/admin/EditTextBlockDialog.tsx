@@ -170,8 +170,7 @@ export const EditTextBlockDialog: React.FC<
   const computeRange = useCallback((ed: Editor) => {
     const { state } = ed;
     const markType = state.schema.marks['interactiveWord'];
-    const sel = state.selection;
-    const pos = sel.empty ? sel.$head.pos : sel.from;
+    const pos = state.selection.from;
     const resolved = state.doc.resolve(pos);
     return getMarkRange(resolved, markType) || null;
   }, []);
@@ -310,9 +309,6 @@ export const EditTextBlockDialog: React.FC<
     onOpenChange(false);
   };
 
-  const tipSelectValue = iwTip === '' ? 'none' : iwTip;
-  const padezSelectValue = iwPadez === '' ? 'none' : iwPadez;
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-5xl">
@@ -321,6 +317,7 @@ export const EditTextBlockDialog: React.FC<
         </DialogHeader>
 
         <div className="grid md:grid-cols-2 gap-6 py-4 max-h-[70vh] overflow-y-auto pr-1 md:pr-4">
+          {/* LEFT */}
           <div className="space-y-4">
             <div>
               <Label htmlFor="block-title-edit">Block Title</Label>
@@ -362,6 +359,7 @@ export const EditTextBlockDialog: React.FC<
             </div>
           </div>
 
+          {/* RIGHT: Interactive Word */}
           <div className="space-y-4">
             {panelVisible ? (
               <div className="p-3 border rounded-md bg-gray-50">
@@ -388,28 +386,33 @@ export const EditTextBlockDialog: React.FC<
 
                   <div>
                     <Label>Član</Label>
-                    <Input
-                      placeholder="der / die / das"
-                      value={iwClan}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setIwClan(v);
-                        applyAttr({ clan: v });
+                    <Select
+                      value={iwClan || 'none'}
+                      onValueChange={(v) => {
+                        const next = v === 'none' ? '' : v;
+                        setIwClan(next);
+                        applyAttr({ clan: next });
                       }}
-                    />
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="(nema)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">—</SelectItem>
+                        <SelectItem value="der">der</SelectItem>
+                        <SelectItem value="die">die</SelectItem>
+                        <SelectItem value="das">das</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
                     <Label>Tip reči</Label>
                     <Select
-                      value={tipSelectValue}
+                      value={iwTip || 'none'}
                       onValueChange={(v) => {
-                        if (v === 'none') {
-                          setIwTip('');
-                          applyAttr({ tip: '' });
-                          return;
-                        }
-                        const val = v as PartOfSpeech;
+                        const val =
+                          v === 'none' ? '' : (v as PartOfSpeech);
                         setIwTip(val);
                         applyAttr({ tip: val });
                       }}
@@ -440,14 +443,9 @@ export const EditTextBlockDialog: React.FC<
                   <div>
                     <Label>Padež</Label>
                     <Select
-                      value={padezSelectValue}
+                      value={iwPadez || 'none'}
                       onValueChange={(v) => {
-                        if (v === 'none') {
-                          setIwPadez('');
-                          applyAttr({ padez: '' });
-                          return;
-                        }
-                        const val = v as Padez;
+                        const val = v === 'none' ? '' : (v as Padez);
                         setIwPadez(val);
                         applyAttr({ padez: val });
                       }}

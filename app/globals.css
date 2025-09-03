@@ -171,3 +171,37 @@ mark[data-color='#008000'] {
 .sw-iw--ostalo {
   background-color: #f3e8ff;
 }
+
+.sw-case--nominativ {
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.sw-case--dativ {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.sw-case--akuzativ {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.sw-case--genitiv {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.sw-article--der {
+  color: rgb(37 99 235);
+}
+.sw-article--die {
+  color: rgb(220 38 38);
+}
+.sw-article--das {
+  color: rgb(22 163 74);
+}
